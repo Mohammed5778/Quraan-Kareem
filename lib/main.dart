@@ -1,6 +1,5 @@
-// main.dart - تطبيق القرآن الكريم الشامل (نسخة احترافية محسّنة)
-// Quran App Pro v2.0.0 - Enhanced Design + Offline Download
-// المطور: محمد إبراهيم عبدالله
+// main.dart - تطبيق القرآن الكريم الذكي الشامل
+// Quran Smart Pro v3.0.0 - Complete Offline Experience
 
 import 'dart:async';
 import 'dart:convert';
@@ -11,55 +10,29 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
-// ==================== CONSTANTS ====================
-class AppConstants {
-  static const String alquranApiBase = 'https://api.alquran.cloud/v1';
-  static const String mp3quranApiBase = 'https://mp3quran.net/api/v3';
-  static const String adhkarApiUrl = 'https://raw.githubusercontent.com/rn0x/Adhkar-json/main/adhkar.json';
-  static const String aladhanApiBase = 'https://api.aladhan.com/v1';
-  
-  // Enhanced Color Palette
-  static const Color primaryColor = Color(0xFF00BFA6);
-  static const Color primaryDark = Color(0xFF00897B);
-  static const Color primaryLight = Color(0xFF64FFDA);
-  static const Color secondaryColor = Color(0xFF448AFF);
-  static const Color accentColor = Color(0xFFE040FB);
-  static const Color goldColor = Color(0xFFFFD700);
-  static const Color cardDark = Color(0xFF1E293B);
-  static const Color cardDarker = Color(0xFF0F172A);
-  static const Color surfaceDark = Color(0xFF020617);
-  
-  // Gradients
-  static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF00BFA6), Color(0xFF00897B)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-  
-  static const LinearGradient goldGradient = LinearGradient(
-    colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-  
-  static const LinearGradient rainbowGradient = LinearGradient(
-    colors: [
-      Color(0xFF22c55e),
-      Color(0xFF06b6d4),
-      Color(0xFF3b82f6),
-      Color(0xFF8b5cf6),
-    ],
-  );
-}
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                              التطبيق الرئيسي                                  ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
-// ==================== MAIN APP ====================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // قفل الاتجاه للوضع العمودي
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  
+  // تخصيص شريط الحالة
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+  
   final prefs = await SharedPreferences.getInstance();
   runApp(QuranApp(prefs: prefs));
 }
@@ -73,29 +46,32 @@ class QuranApp extends StatefulWidget {
 }
 
 class _QuranAppState extends State<QuranApp> {
-  ThemeMode _themeMode = ThemeMode.dark;
-  String _currentTheme = 'dark';
+  late ThemeMode _themeMode;
+  bool _setupComplete = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTheme();
+    _loadSettings();
   }
 
-  void _loadTheme() {
-    final theme = widget.prefs.getString('theme_mode') ?? 'dark';
-    setState(() {
-      _currentTheme = theme;
-      _themeMode = theme == 'light' ? ThemeMode.light : ThemeMode.dark;
-    });
+  void _loadSettings() {
+    final isDark = widget.prefs.getBool('dark_mode') ?? true;
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    _setupComplete = widget.prefs.getBool('setup_complete') ?? false;
+    setState(() {});
   }
 
-  void updateTheme(String mode) {
+  void _toggleTheme() {
     setState(() {
-      _currentTheme = mode;
-      _themeMode = mode == 'light' ? ThemeMode.light : ThemeMode.dark;
+      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     });
-    widget.prefs.setString('theme_mode', mode);
+    widget.prefs.setBool('dark_mode', _themeMode == ThemeMode.dark);
+  }
+
+  void _completeSetup() {
+    widget.prefs.setBool('setup_complete', true);
+    setState(() => _setupComplete = true);
   }
 
   @override
@@ -104,13 +80,18 @@ class _QuranAppState extends State<QuranApp> {
       title: 'القرآن الكريم',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-      theme: _buildLightTheme(),
-      darkTheme: _buildDarkTheme(),
-      home: MainScreen(
-        prefs: widget.prefs,
-        onThemeChanged: updateTheme,
-        currentTheme: _currentTheme,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      home: _setupComplete
+          ? MainScreen(
+              prefs: widget.prefs,
+              onToggleTheme: _toggleTheme,
+              isDarkMode: _themeMode == ThemeMode.dark,
+            )
+          : SetupScreen(
+              prefs: widget.prefs,
+              onComplete: _completeSetup,
+            ),
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -119,104 +100,127 @@ class _QuranAppState extends State<QuranApp> {
       },
     );
   }
+}
 
-  ThemeData _buildDarkTheme() {
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                              الثوابت والألوان                                 ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+class AppColors {
+  // الألوان الرئيسية
+  static const Color primary = Color(0xFF00D9A5);
+  static const Color primaryDark = Color(0xFF00B386);
+  static const Color secondary = Color(0xFF6C63FF);
+  static const Color accent = Color(0xFFFF6B9D);
+  static const Color gold = Color(0xFFFFD700);
+  static const Color goldDark = Color(0xFFFFA000);
+  
+  // ألوان الخلفية الداكنة
+  static const Color bgDark = Color(0xFF0A0E21);
+  static const Color cardDark = Color(0xFF1D1F33);
+  static const Color surfaceDark = Color(0xFF161A2C);
+  
+  // ألوان الخلفية الفاتحة
+  static const Color bgLight = Color(0xFFF5F7FA);
+  static const Color cardLight = Color(0xFFFFFFFF);
+  
+  // التدرجات
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF00D9A5), Color(0xFF00B386)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient goldGradient = LinearGradient(
+    colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient purpleGradient = LinearGradient(
+    colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient blueGradient = LinearGradient(
+    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient pinkGradient = LinearGradient(
+    colors: [Color(0xFFFF6B9D), Color(0xFFFF4777)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient orangeGradient = LinearGradient(
+    colors: [Color(0xFFF97316), Color(0xFFEA580C)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+
+class AppTheme {
+  static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: AppConstants.primaryColor,
-        brightness: Brightness.dark,
-        primary: AppConstants.primaryColor,
-        secondary: AppConstants.secondaryColor,
-        tertiary: AppConstants.accentColor,
-        surface: AppConstants.cardDark,
-      ),
-      scaffoldBackgroundColor: AppConstants.surfaceDark,
       fontFamily: 'Amiri',
-      appBarTheme: AppBarTheme(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        brightness: Brightness.dark,
+        primary: AppColors.primary,
+        secondary: AppColors.secondary,
+        surface: AppColors.cardDark,
+      ),
+      scaffoldBackgroundColor: AppColors.bgDark,
+      appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: AppConstants.cardDarker.withValues(alpha: 0.95),
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
-        color: AppConstants.cardDark,
+        color: AppColors.cardDark,
         elevation: 8,
-        shadowColor: Colors.black.withValues(alpha: 0.3),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: AppConstants.cardDarker.withValues(alpha: 0.98),
-        selectedItemColor: AppConstants.primaryColor,
-        unselectedItemColor: Colors.grey[600],
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: AppColors.surfaceDark,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         elevation: 20,
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppConstants.primaryColor,
-          foregroundColor: Colors.white,
-          elevation: 8,
-          shadowColor: AppConstants.primaryColor.withValues(alpha: 0.4),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppConstants.cardDark,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppConstants.primaryColor, width: 2),
-        ),
       ),
     );
   }
 
-  ThemeData _buildLightTheme() {
+  static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: AppConstants.primaryColor,
-        brightness: Brightness.light,
-        primary: AppConstants.primaryColor,
-        secondary: AppConstants.secondaryColor,
-      ),
-      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
       fontFamily: 'Amiri',
-      appBarTheme: const AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        brightness: Brightness.light,
+        primary: AppColors.primary,
+        secondary: AppColors.secondary,
       ),
+      scaffoldBackgroundColor: AppColors.bgLight,
       cardTheme: CardThemeData(
-        color: Colors.white,
+        color: AppColors.cardLight,
         elevation: 4,
-        shadowColor: Colors.black.withValues(alpha: 0.1),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     );
   }
 }
 
-// ==================== MODELS ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                                 النماذج                                       ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
 class Surah {
   final int number;
@@ -243,79 +247,95 @@ class Surah {
 
   factory Surah.fromJson(Map<String, dynamic> json) {
     return Surah(
-      number: json['number'],
-      name: json['name'],
-      englishName: json['englishName'],
-      englishNameTranslation: json['englishNameTranslation'],
-      numberOfAyahs: json['numberOfAyahs'],
-      revelationType: json['revelationType'],
+      number: json['number'] ?? 0,
+      name: json['name'] ?? '',
+      englishName: json['englishName'] ?? '',
+      englishNameTranslation: json['englishNameTranslation'] ?? '',
+      numberOfAyahs: json['numberOfAyahs'] ?? 0,
+      revelationType: json['revelationType'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'number': number,
+    'name': name,
+    'englishName': englishName,
+    'englishNameTranslation': englishNameTranslation,
+    'numberOfAyahs': numberOfAyahs,
+    'revelationType': revelationType,
+  };
 
   bool get isMakki => revelationType == 'Meccan';
 }
 
-class Verse {
+class Ayah {
   final int number;
   final int numberInSurah;
   final String text;
   final int juz;
   final int page;
-  final int hizbQuarter;
+  final String? audio;
   String? translation;
-  String? tafsir;
-  String? audioUrl;
 
-  Verse({
+  Ayah({
     required this.number,
     required this.numberInSurah,
     required this.text,
     required this.juz,
     required this.page,
-    required this.hizbQuarter,
+    this.audio,
     this.translation,
-    this.tafsir,
-    this.audioUrl,
   });
 
-  factory Verse.fromJson(Map<String, dynamic> json) {
-    return Verse(
+  factory Ayah.fromJson(Map<String, dynamic> json) {
+    return Ayah(
       number: json['number'] ?? 0,
       numberInSurah: json['numberInSurah'] ?? 0,
       text: json['text'] ?? '',
       juz: json['juz'] ?? 1,
       page: json['page'] ?? 1,
-      hizbQuarter: json['hizbQuarter'] ?? 1,
-      audioUrl: json['audio'],
+      audio: json['audio'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'number': number,
+    'numberInSurah': numberInSurah,
+    'text': text,
+    'juz': juz,
+    'page': page,
+    'audio': audio,
+    'translation': translation,
+  };
 }
 
 class Reciter {
   final String id;
   final String name;
-  final String? server;
+  final String server;
+  final String? rewaya;
   final List<int> surahList;
-  final String? photo;
 
   Reciter({
     required this.id,
     required this.name,
-    this.server,
+    required this.server,
+    this.rewaya,
     this.surahList = const [],
-    this.photo,
   });
 
-  factory Reciter.fromMp3QuranJson(Map<String, dynamic> json) {
+  factory Reciter.fromJson(Map<String, dynamic> json) {
     final moshaf = json['moshaf'] as List?;
-    String? server;
+    String server = '';
+    String? rewaya;
     List<int> surahList = [];
     
     if (moshaf != null && moshaf.isNotEmpty) {
-      server = moshaf[0]['server'];
-      final surahListStr = moshaf[0]['surah_list'] as String?;
-      if (surahListStr != null) {
-        surahList = surahListStr.split(',').map((s) => int.tryParse(s) ?? 0).toList();
+      server = moshaf[0]['server'] ?? '';
+      rewaya = moshaf[0]['name'];
+      final surahStr = moshaf[0]['surah_list'] as String?;
+      if (surahStr != null) {
+        surahList = surahStr.split(',').map((s) => int.tryParse(s) ?? 0).toList();
       }
     }
 
@@ -323,21 +343,76 @@ class Reciter {
       id: json['id'].toString(),
       name: json['name'] ?? '',
       server: server,
+      rewaya: rewaya,
       surahList: surahList,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'server': server,
+    'rewaya': rewaya,
+    'surahList': surahList,
+  };
+
+  factory Reciter.fromLocalJson(Map<String, dynamic> json) => Reciter(
+    id: json['id'] ?? '',
+    name: json['name'] ?? '',
+    server: json['server'] ?? '',
+    rewaya: json['rewaya'],
+    surahList: (json['surahList'] as List?)?.cast<int>() ?? [],
+  );
+
+  String getAudioUrl(int surahNumber) {
+    return '$server${surahNumber.toString().padLeft(3, '0')}.mp3';
+  }
 }
 
-class DownloadedSurah {
+class Bookmark {
   final int surahNumber;
+  final String surahName;
+  final int ayahNumber;
+  final String ayahText;
+  final DateTime createdAt;
+
+  Bookmark({
+    required this.surahNumber,
+    required this.surahName,
+    required this.ayahNumber,
+    required this.ayahText,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'surahNumber': surahNumber,
+    'surahName': surahName,
+    'ayahNumber': ayahNumber,
+    'ayahText': ayahText,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory Bookmark.fromJson(Map<String, dynamic> json) => Bookmark(
+    surahNumber: json['surahNumber'],
+    surahName: json['surahName'],
+    ayahNumber: json['ayahNumber'],
+    ayahText: json['ayahText'] ?? '',
+    createdAt: DateTime.parse(json['createdAt']),
+  );
+}
+
+class DownloadedAudio {
+  final int surahNumber;
+  final String surahName;
   final String reciterId;
   final String reciterName;
   final String filePath;
   final DateTime downloadedAt;
   final int fileSize;
 
-  DownloadedSurah({
+  DownloadedAudio({
     required this.surahNumber,
+    required this.surahName,
     required this.reciterId,
     required this.reciterName,
     required this.filePath,
@@ -347,6 +422,7 @@ class DownloadedSurah {
 
   Map<String, dynamic> toJson() => {
     'surahNumber': surahNumber,
+    'surahName': surahName,
     'reciterId': reciterId,
     'reciterName': reciterName,
     'filePath': filePath,
@@ -354,8 +430,9 @@ class DownloadedSurah {
     'fileSize': fileSize,
   };
 
-  factory DownloadedSurah.fromJson(Map<String, dynamic> json) => DownloadedSurah(
+  factory DownloadedAudio.fromJson(Map<String, dynamic> json) => DownloadedAudio(
     surahNumber: json['surahNumber'],
+    surahName: json['surahName'] ?? '',
     reciterId: json['reciterId'],
     reciterName: json['reciterName'],
     filePath: json['filePath'],
@@ -364,206 +441,248 @@ class DownloadedSurah {
   );
 }
 
-class Bookmark {
+class LastRead {
   final int surahNumber;
-  final String surahName;
-  final int verseNumber;
-  final DateTime createdAt;
-  final String? note;
+  final int ayahNumber;
+  final DateTime timestamp;
 
-  Bookmark({
+  LastRead({
     required this.surahNumber,
-    required this.surahName,
-    required this.verseNumber,
-    required this.createdAt,
-    this.note,
+    required this.ayahNumber,
+    required this.timestamp,
   });
 
   Map<String, dynamic> toJson() => {
     'surahNumber': surahNumber,
-    'surahName': surahName,
-    'verseNumber': verseNumber,
-    'createdAt': createdAt.toIso8601String(),
-    'note': note,
+    'ayahNumber': ayahNumber,
+    'timestamp': timestamp.toIso8601String(),
   };
 
-  factory Bookmark.fromJson(Map<String, dynamic> json) => Bookmark(
+  factory LastRead.fromJson(Map<String, dynamic> json) => LastRead(
     surahNumber: json['surahNumber'],
-    surahName: json['surahName'],
-    verseNumber: json['verseNumber'],
-    createdAt: DateTime.parse(json['createdAt']),
-    note: json['note'],
+    ayahNumber: json['ayahNumber'],
+    timestamp: DateTime.parse(json['timestamp']),
   );
 }
 
 class AdhkarCategory {
   final int id;
-  final String category;
-  final List<AdhkarItem> items;
+  final String name;
+  final List<Dhikr> items;
+  final IconData icon;
+  final List<Color> colors;
 
   AdhkarCategory({
     required this.id,
-    required this.category,
+    required this.name,
     required this.items,
+    required this.icon,
+    required this.colors,
   });
-
-  factory AdhkarCategory.fromJson(Map<String, dynamic> json) {
-    final array = json['array'] as List? ?? [];
-    return AdhkarCategory(
-      id: json['id'] ?? 0,
-      category: json['category'] ?? '',
-      items: array.map((e) => AdhkarItem.fromJson(e)).toList(),
-    );
-  }
 }
 
-class AdhkarItem {
+class Dhikr {
   final int id;
   final String text;
   final int count;
-  final String? audio;
   final String? reference;
 
-  AdhkarItem({
+  Dhikr({
     required this.id,
     required this.text,
     required this.count,
-    this.audio,
     this.reference,
   });
-
-  factory AdhkarItem.fromJson(Map<String, dynamic> json) {
-    return AdhkarItem(
-      id: json['id'] ?? 0,
-      text: json['text'] ?? '',
-      count: json['count'] ?? 1,
-      audio: json['audio'],
-      reference: json['reference'],
-    );
-  }
 }
 
-class RadioStation {
-  final String id;
-  final String name;
-  final String url;
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                             خدمات البيانات                                    ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
-  RadioStation({required this.id, required this.name, required this.url});
-
-  factory RadioStation.fromJson(Map<String, dynamic> json) {
-    return RadioStation(
-      id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      url: json['url'] ?? '',
-    );
-  }
-}
-
-class PrayerTimings {
-  final String fajr;
-  final String sunrise;
-  final String dhuhr;
-  final String asr;
-  final String maghrib;
-  final String isha;
-
-  PrayerTimings({
-    required this.fajr,
-    required this.sunrise,
-    required this.dhuhr,
-    required this.asr,
-    required this.maghrib,
-    required this.isha,
-  });
-
-  factory PrayerTimings.fromJson(Map<String, dynamic> json) {
-    return PrayerTimings(
-      fajr: (json['Fajr'] ?? '').toString().split(' ').first,
-      sunrise: (json['Sunrise'] ?? '').toString().split(' ').first,
-      dhuhr: (json['Dhuhr'] ?? '').toString().split(' ').first,
-      asr: (json['Asr'] ?? '').toString().split(' ').first,
-      maghrib: (json['Maghrib'] ?? '').toString().split(' ').first,
-      isha: (json['Isha'] ?? '').toString().split(' ').first,
-    );
+class DataService {
+  static const String _quranApi = 'https://api.alquran.cloud/v1';
+  static const String _recitersApi = 'https://mp3quran.net/api/v3/reciters?language=ar';
+  
+  final SharedPreferences prefs;
+  late Directory _appDir;
+  
+  DataService(this.prefs);
+  
+  Future<void> init() async {
+    _appDir = await getApplicationDocumentsDirectory();
+    final audioDir = Directory('${_appDir.path}/audio');
+    if (!await audioDir.exists()) {
+      await audioDir.create(recursive: true);
+    }
   }
 
-  List<MapEntry<String, String>> toList() {
-    return [
-      MapEntry('الفجر', fajr),
-      MapEntry('الشروق', sunrise),
-      MapEntry('الظهر', dhuhr),
-      MapEntry('العصر', asr),
-      MapEntry('المغرب', maghrib),
-      MapEntry('العشاء', isha),
-    ];
-  }
-}
-
-class LastRead {
-  final int surah;
-  final int ayah;
-  final DateTime timestamp;
-
-  LastRead({required this.surah, required this.ayah, required this.timestamp});
-
-  Map<String, dynamic> toJson() => {
-    'surah': surah,
-    'ayah': ayah,
-    'timestamp': timestamp.toIso8601String(),
-  };
-
-  factory LastRead.fromJson(Map<String, dynamic> json) => LastRead(
-    surah: json['surah'],
-    ayah: json['ayah'],
-    timestamp: DateTime.parse(json['timestamp']),
-  );
-}
-
-// ==================== DOWNLOAD SERVICE ====================
-
-class DownloadService {
-  static final DownloadService _instance = DownloadService._internal();
-  factory DownloadService() => _instance;
-  DownloadService._internal();
-
-  final Map<String, StreamController<double>> _progressControllers = {};
-  final Map<String, bool> _activeDownloads = {};
-
-  Stream<double> getProgressStream(String key) {
-    _progressControllers[key] ??= StreamController<double>.broadcast();
-    return _progressControllers[key]!.stream;
+  // ======= API Calls =======
+  
+  Future<List<Surah>> fetchSurahs() async {
+    try {
+      final response = await http.get(Uri.parse('$_quranApi/surah'))
+          .timeout(const Duration(seconds: 30));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> surahsJson = data['data'];
+        return surahsJson.map((j) => Surah.fromJson(j)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching surahs: $e');
+    }
+    return [];
   }
 
-  Future<String?> downloadSurah({
+  Future<List<Ayah>> fetchAyahs(int surahNumber) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_quranApi/surah/$surahNumber/ar.alafasy'),
+      ).timeout(const Duration(seconds: 30));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> ayahsJson = data['data']['ayahs'];
+        return ayahsJson.map((j) => Ayah.fromJson(j)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching ayahs: $e');
+    }
+    return [];
+  }
+
+  Future<List<Ayah>> fetchAyahsWithTranslation(int surahNumber, String edition) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_quranApi/surah/$surahNumber/editions/quran-uthmani,$edition'),
+      ).timeout(const Duration(seconds: 30));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> editions = data['data'];
+        
+        final arabicAyahs = editions[0]['ayahs'] as List;
+        final translationAyahs = editions.length > 1 ? editions[1]['ayahs'] as List : [];
+        
+        return List.generate(arabicAyahs.length, (i) {
+          final ayah = Ayah.fromJson(arabicAyahs[i]);
+          if (i < translationAyahs.length) {
+            ayah.translation = translationAyahs[i]['text'];
+          }
+          return ayah;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching ayahs with translation: $e');
+    }
+    return [];
+  }
+
+  Future<List<Reciter>> fetchReciters() async {
+    try {
+      final response = await http.get(Uri.parse(_recitersApi))
+          .timeout(const Duration(seconds: 30));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> recitersJson = data['reciters'] ?? [];
+        return recitersJson
+            .map((j) => Reciter.fromJson(j))
+            .where((r) => r.server.isNotEmpty)
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching reciters: $e');
+    }
+    return [];
+  }
+
+  // ======= Local Storage =======
+  
+  Future<void> saveSurahs(List<Surah> surahs) async {
+    final jsonList = surahs.map((s) => s.toJson()).toList();
+    await prefs.setString('cached_surahs', json.encode(jsonList));
+  }
+
+  List<Surah> getSurahs() {
+    final jsonStr = prefs.getString('cached_surahs');
+    if (jsonStr == null) return [];
+    final jsonList = json.decode(jsonStr) as List;
+    return jsonList.map((j) => Surah.fromJson(j)).toList();
+  }
+
+  Future<void> saveAyahs(int surahNumber, List<Ayah> ayahs) async {
+    final jsonList = ayahs.map((a) => a.toJson()).toList();
+    await prefs.setString('ayahs_$surahNumber', json.encode(jsonList));
+  }
+
+  List<Ayah> getAyahs(int surahNumber) {
+    final jsonStr = prefs.getString('ayahs_$surahNumber');
+    if (jsonStr == null) return [];
+    final jsonList = json.decode(jsonStr) as List;
+    return jsonList.map((j) => Ayah.fromJson(j)).toList();
+  }
+
+  Future<void> saveReciters(List<Reciter> reciters) async {
+    final jsonList = reciters.map((r) => r.toJson()).toList();
+    await prefs.setString('cached_reciters', json.encode(jsonList));
+  }
+
+  List<Reciter> getReciters() {
+    final jsonStr = prefs.getString('cached_reciters');
+    if (jsonStr == null) return [];
+    final jsonList = json.decode(jsonStr) as List;
+    return jsonList.map((j) => Reciter.fromLocalJson(j)).toList();
+  }
+
+  Future<void> saveBookmarks(List<Bookmark> bookmarks) async {
+    final jsonList = bookmarks.map((b) => b.toJson()).toList();
+    await prefs.setString('bookmarks', json.encode(jsonList));
+  }
+
+  List<Bookmark> getBookmarks() {
+    final jsonStr = prefs.getString('bookmarks');
+    if (jsonStr == null) return [];
+    final jsonList = json.decode(jsonStr) as List;
+    return jsonList.map((j) => Bookmark.fromJson(j)).toList();
+  }
+
+  Future<void> saveDownloads(List<DownloadedAudio> downloads) async {
+    final jsonList = downloads.map((d) => d.toJson()).toList();
+    await prefs.setString('downloads', json.encode(jsonList));
+  }
+
+  List<DownloadedAudio> getDownloads() {
+    final jsonStr = prefs.getString('downloads');
+    if (jsonStr == null) return [];
+    final jsonList = json.decode(jsonStr) as List;
+    return jsonList.map((j) => DownloadedAudio.fromJson(j)).toList();
+  }
+
+  Future<void> saveLastRead(LastRead lastRead) async {
+    await prefs.setString('last_read', json.encode(lastRead.toJson()));
+  }
+
+  LastRead? getLastRead() {
+    final jsonStr = prefs.getString('last_read');
+    if (jsonStr == null) return null;
+    return LastRead.fromJson(json.decode(jsonStr));
+  }
+
+  // ======= Download Audio =======
+  
+  Future<String?> downloadAudio({
     required int surahNumber,
     required Reciter reciter,
     required Function(double) onProgress,
   }) async {
-    final key = '${reciter.id}_$surahNumber';
-    
-    if (_activeDownloads[key] == true) {
-      return null;
-    }
-    
-    _activeDownloads[key] = true;
-    
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final audioDir = Directory('${dir.path}/quran_audio');
-      if (!await audioDir.exists()) {
-        await audioDir.create(recursive: true);
-      }
-
-      final paddedNumber = surahNumber.toString().padLeft(3, '0');
-      final url = '${reciter.server}$paddedNumber.mp3';
-      final filePath = '${audioDir.path}/${reciter.id}_$paddedNumber.mp3';
+      final url = reciter.getAudioUrl(surahNumber);
+      final filePath = '${_appDir.path}/audio/${reciter.id}_${surahNumber.toString().padLeft(3, '0')}.mp3';
       
       final file = File(filePath);
-      if (await file.exists()) {
-        _activeDownloads[key] = false;
-        return filePath;
-      }
-
+      if (await file.exists()) return filePath;
+      
       final request = http.Request('GET', Uri.parse(url));
       final response = await http.Client().send(request);
       
@@ -576,249 +695,55 @@ class DownloadService {
         sink.add(chunk);
         receivedBytes += chunk.length;
         if (contentLength > 0) {
-          final progress = receivedBytes / contentLength;
-          onProgress(progress);
-          _progressControllers[key]?.add(progress);
+          onProgress(receivedBytes / contentLength);
         }
       }
       
       await sink.close();
-      _activeDownloads[key] = false;
-      
       return filePath;
     } catch (e) {
-      _activeDownloads[key] = false;
-      rethrow;
-    }
-  }
-
-  Future<void> deleteSurah(String filePath) async {
-    final file = File(filePath);
-    if (await file.exists()) {
-      await file.delete();
-    }
-  }
-
-  Future<int> getDownloadedSize() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final audioDir = Directory('${dir.path}/quran_audio');
-      if (!await audioDir.exists()) return 0;
-      
-      int totalSize = 0;
-      await for (final entity in audioDir.list()) {
-        if (entity is File) {
-          totalSize += await entity.length();
-        }
-      }
-      return totalSize;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  void dispose() {
-    for (var controller in _progressControllers.values) {
-      controller.close();
-    }
-  }
-}
-
-// ==================== API SERVICES ====================
-
-class QuranApiService {
-  static const String _baseUrl = AppConstants.alquranApiBase;
-  static const String _mp3BaseUrl = AppConstants.mp3quranApiBase;
-
-  Future<List<Surah>> getSurahs() async {
-    try {
-      final response = await http.get(Uri.parse('$_baseUrl/surah'))
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> surahsJson = data['data'];
-        return surahsJson.map((j) => Surah.fromJson(j)).toList();
-      }
-      throw Exception('Failed to load surahs');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
-
-  Future<List<Verse>> getVerses(int surahNumber) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/surah/$surahNumber/ar.alafasy'),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> ayahs = data['data']['ayahs'];
-        return ayahs.map((ayah) => Verse.fromJson(ayah)).toList();
-      }
-      throw Exception('Failed to load verses');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
-
-  Future<List<Verse>> getVersesWithTranslation(int surahNumber, String translationId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/surah/$surahNumber/editions/quran-uthmani,$translationId'),
-      ).timeout(const Duration(seconds: 20));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> editions = data['data'];
-        
-        final arabicAyahs = editions[0]['ayahs'] as List;
-        final translationAyahs = editions.length > 1 ? editions[1]['ayahs'] as List : [];
-
-        return List.generate(arabicAyahs.length, (i) {
-          final verse = Verse.fromJson(arabicAyahs[i]);
-          if (i < translationAyahs.length) {
-            verse.translation = translationAyahs[i]['text'];
-          }
-          return verse;
-        });
-      }
-      throw Exception('Failed to load verses');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
-
-  Future<List<Reciter>> getReciters({String language = 'ar'}) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_mp3BaseUrl/reciters?language=$language'),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> recitersJson = data['reciters'] ?? [];
-        return recitersJson
-            .map((j) => Reciter.fromMp3QuranJson(j))
-            .where((r) => r.server != null)
-            .toList();
-      }
-      return [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<List<RadioStation>> getRadios({String language = 'ar'}) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_mp3BaseUrl/radios?language=$language'),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> radiosJson = data['radios'] ?? [];
-        return radiosJson.map((j) => RadioStation.fromJson(j)).toList();
-      }
-      return [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  String getSurahAudioUrl(Reciter reciter, int surahNumber) {
-    final paddedNumber = surahNumber.toString().padLeft(3, '0');
-    return '${reciter.server}$paddedNumber.mp3';
-  }
-}
-
-class AdhkarService {
-  Future<List<AdhkarCategory>> getAdhkar() async {
-    try {
-      final response = await http.get(
-        Uri.parse(AppConstants.adhkarApiUrl),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((j) => AdhkarCategory.fromJson(j)).toList();
-      }
-      return [];
-    } catch (e) {
-      return [];
-    }
-  }
-}
-
-class PrayerTimeService {
-  Future<PrayerTimings?> getPrayerTimes(double lat, double lng) async {
-    try {
-      final now = DateTime.now();
-      final response = await http.get(
-        Uri.parse(
-          '${AppConstants.aladhanApiBase}/timings/${now.day}-${now.month}-${now.year}?latitude=$lat&longitude=$lng&method=4',
-        ),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return PrayerTimings.fromJson(data['data']['timings']);
-      }
-      return null;
-    } catch (e) {
+      debugPrint('Error downloading audio: $e');
       return null;
     }
   }
 
-  double calculateQiblaDirection(double lat, double lng) {
-    const kaabaLat = 21.4225;
-    const kaabaLng = 39.8262;
-
-    final latRad = lat * pi / 180;
-    final lngRad = lng * pi / 180;
-    final kaabaLatRad = kaabaLat * pi / 180;
-    final kaabaLngRad = kaabaLng * pi / 180;
-
-    final y = sin(kaabaLngRad - lngRad);
-    final x = cos(latRad) * tan(kaabaLatRad) - sin(latRad) * cos(kaabaLngRad - lngRad);
-    
-    var qibla = atan2(y, x) * 180 / pi;
-    if (qibla < 0) qibla += 360;
-    
-    return qibla;
-  }
-
-  Future<Position?> getCurrentLocation() async {
+  Future<void> deleteAudio(String filePath) async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return null;
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return null;
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
       }
-
-      if (permission == LocationPermission.deniedForever) return null;
-
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
     } catch (e) {
-      return null;
+      debugPrint('Error deleting audio: $e');
     }
   }
+
+  // ======= Settings =======
+  
+  double get fontSize => prefs.getDouble('font_size') ?? 26.0;
+  set fontSize(double value) => prefs.setDouble('font_size', value);
+  
+  String? get selectedReciterId => prefs.getString('reciter_id');
+  set selectedReciterId(String? value) {
+    if (value != null) prefs.setString('reciter_id', value);
+  }
+
+  bool get showTranslation => prefs.getBool('show_translation') ?? false;
+  set showTranslation(bool value) => prefs.setBool('show_translation', value);
 }
 
-// ==================== AUDIO SERVICE ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                             خدمة الصوت                                        ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
 class AudioService {
   final AudioPlayer _player = AudioPlayer();
+  
   bool _isPlaying = false;
-  String _currentType = 'none';
+  String? _currentSource;
   
   bool get isPlaying => _isPlaying;
-  String get currentType => _currentType;
+  String? get currentSource => _currentSource;
   AudioPlayer get player => _player;
   
   Stream<Duration> get positionStream => _player.positionStream;
@@ -827,41 +752,20 @@ class AudioService {
   Duration? get duration => _player.duration;
   Duration get position => _player.position;
 
-  Future<void> playSurah(String url) async {
+  Future<void> play(String source, {bool isFile = false}) async {
     try {
-      _currentType = 'surah';
-      await _player.setUrl(url);
+      _currentSource = source;
+      if (isFile) {
+        await _player.setFilePath(source);
+      } else {
+        await _player.setUrl(source);
+      }
       await _player.play();
       _isPlaying = true;
     } catch (e) {
       _isPlaying = false;
-      _currentType = 'none';
-      rethrow;
-    }
-  }
-
-  Future<void> playFromFile(String filePath) async {
-    try {
-      _currentType = 'surah';
-      await _player.setFilePath(filePath);
-      await _player.play();
-      _isPlaying = true;
-    } catch (e) {
-      _isPlaying = false;
-      _currentType = 'none';
-      rethrow;
-    }
-  }
-
-  Future<void> playRadio(String url) async {
-    try {
-      _currentType = 'radio';
-      await _player.setUrl(url);
-      await _player.play();
-      _isPlaying = true;
-    } catch (e) {
-      _isPlaying = false;
-      _currentType = 'none';
+      _currentSource = null;
+      debugPrint('Error playing audio: $e');
       rethrow;
     }
   }
@@ -879,11 +783,15 @@ class AudioService {
   Future<void> stop() async {
     await _player.stop();
     _isPlaying = false;
-    _currentType = 'none';
+    _currentSource = null;
   }
 
   Future<void> seek(Duration position) async {
     await _player.seek(position);
+  }
+
+  Future<void> setSpeed(double speed) async {
+    await _player.setSpeed(speed);
   }
 
   void dispose() {
@@ -891,178 +799,710 @@ class AudioService {
   }
 }
 
-// ==================== MAIN SCREEN ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                           بيانات الأذكار                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+class AdhkarData {
+  static List<AdhkarCategory> getCategories() {
+    return [
+      AdhkarCategory(
+        id: 1,
+        name: 'أذكار الصباح',
+        icon: Icons.wb_sunny_rounded,
+        colors: [const Color(0xFFFF9800), const Color(0xFFFF5722)],
+        items: [
+          Dhikr(id: 1, text: 'أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ، وَالْحَمْدُ لِلَّهِ، لاَ إِلَـهَ إِلاَّ اللهُ وَحْدَهُ لاَ شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ', count: 1, reference: 'أبو داود'),
+          Dhikr(id: 2, text: 'اللَّهُمَّ بِكَ أَصْبَحْنَا، وَبِكَ أَمْسَيْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ وَإِلَيْكَ النُّشُورُ', count: 1, reference: 'الترمذي'),
+          Dhikr(id: 3, text: 'اللَّهُمَّ أَنْتَ رَبِّي لّا إِلَهَ إِلَّا أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِر لِي فَإِنَّهُ لَا يَغْفِرُ الذُّنُوبَ إِلَّا أَنْتَ', count: 1, reference: 'البخاري'),
+          Dhikr(id: 4, text: 'سُبْحَانَ اللهِ وَبِحَمْدِهِ', count: 100, reference: 'مسلم'),
+          Dhikr(id: 5, text: 'لَا إِلَهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ', count: 10, reference: 'متفق عليه'),
+          Dhikr(id: 6, text: 'اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ فِي الدُّنْيَا وَالآخِرَةِ', count: 3, reference: 'ابن ماجه'),
+          Dhikr(id: 7, text: 'بِسْمِ اللهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ', count: 3, reference: 'الترمذي'),
+        ],
+      ),
+      AdhkarCategory(
+        id: 2,
+        name: 'أذكار المساء',
+        icon: Icons.nights_stay_rounded,
+        colors: [const Color(0xFF5C6BC0), const Color(0xFF3949AB)],
+        items: [
+          Dhikr(id: 8, text: 'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ للهِ، وَالْحَمْدُ للهِ، لَا إِلَهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ', count: 1, reference: 'أبو داود'),
+          Dhikr(id: 9, text: 'اللَّهُمَّ بِكَ أَمْسَيْنَا، وَبِكَ أَصْبَحْنَا، وَبِكَ نَحْيَا، وَبِكَ نَمُوتُ وَإِلَيْكَ الْمَصِيرُ', count: 1, reference: 'الترمذي'),
+          Dhikr(id: 10, text: 'اللَّهُمَّ مَا أَمْسَى بِي مِنْ نِعْمَةٍ أَوْ بِأَحَدٍ مِنْ خَلْقِكَ فَمِنْكَ وَحْدَكَ لَا شَرِيكَ لَكَ، فَلَكَ الْحَمْدُ وَلَكَ الشُّكْرُ', count: 1, reference: 'أبو داود'),
+          Dhikr(id: 11, text: 'اللَّهُمَّ عَافِنِي فِي بَدَنِي، اللَّهُمَّ عَافِنِي فِي سَمْعِي، اللَّهُمَّ عَافِنِي فِي بَصَرِي، لَا إِلَهَ إِلَّا أَنْتَ', count: 3, reference: 'أبو داود'),
+          Dhikr(id: 12, text: 'أَعُوذُ بِكَلِمَاتِ اللهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ', count: 3, reference: 'مسلم'),
+        ],
+      ),
+      AdhkarCategory(
+        id: 3,
+        name: 'أذكار النوم',
+        icon: Icons.bedtime_rounded,
+        colors: [const Color(0xFF7E57C2), const Color(0xFF512DA8)],
+        items: [
+          Dhikr(id: 13, text: 'بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا', count: 1, reference: 'البخاري'),
+          Dhikr(id: 14, text: 'اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ', count: 3, reference: 'أبو داود'),
+          Dhikr(id: 15, text: 'سُبْحَانَ اللهِ', count: 33, reference: 'متفق عليه'),
+          Dhikr(id: 16, text: 'الْحَمْدُ للهِ', count: 33, reference: 'متفق عليه'),
+          Dhikr(id: 17, text: 'اللهُ أَكْبَرُ', count: 34, reference: 'متفق عليه'),
+          Dhikr(id: 18, text: 'اللَّهُمَّ أَسْلَمْتُ نَفْسِي إِلَيْكَ، وَفَوَّضْتُ أَمْرِي إِلَيْكَ، وَوَجَّهْتُ وَجْهِي إِلَيْكَ، وَأَلْجَأْتُ ظَهْرِي إِلَيْكَ، رَغْبَةً وَرَهْبَةً إِلَيْكَ، لَا مَلْجَأَ وَلَا مَنْجَا مِنْكَ إِلَّا إِلَيْكَ، آمَنْتُ بِكِتَابِكَ الَّذِي أَنْزَلْتَ، وَبِنَبِيِّكَ الَّذِي أَرْسَلْتَ', count: 1, reference: 'متفق عليه'),
+        ],
+      ),
+      AdhkarCategory(
+        id: 4,
+        name: 'أذكار الصلاة',
+        icon: Icons.mosque_rounded,
+        colors: [const Color(0xFF26A69A), const Color(0xFF00897B)],
+        items: [
+          Dhikr(id: 19, text: 'أَسْتَغْفِرُ اللهَ', count: 3, reference: 'مسلم'),
+          Dhikr(id: 20, text: 'اللَّهُمَّ أَنْتَ السَّلَامُ وَمِنْكَ السَّلَامُ تَبَارَكْتَ يَا ذَا الْجَلَالِ وَالْإِكْرَامِ', count: 1, reference: 'مسلم'),
+          Dhikr(id: 21, text: 'لَا إِلَهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، اللَّهُمَّ لَا مَانِعَ لِمَا أَعْطَيْتَ، وَلَا مُعْطِيَ لِمَا مَنَعْتَ، وَلَا يَنْفَعُ ذَا الْجَدِّ مِنْكَ الْجَدُّ', count: 1, reference: 'متفق عليه'),
+          Dhikr(id: 22, text: 'سُبْحَانَ اللهِ', count: 33, reference: 'مسلم'),
+          Dhikr(id: 23, text: 'الْحَمْدُ للهِ', count: 33, reference: 'مسلم'),
+          Dhikr(id: 24, text: 'اللهُ أَكْبَرُ', count: 33, reference: 'مسلم'),
+        ],
+      ),
+      AdhkarCategory(
+        id: 5,
+        name: 'أدعية متنوعة',
+        icon: Icons.favorite_rounded,
+        colors: [const Color(0xFFEC407A), const Color(0xFFD81B60)],
+        items: [
+          Dhikr(id: 25, text: 'رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ', count: 1, reference: 'القرآن الكريم'),
+          Dhikr(id: 26, text: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ، وَأَعُوذُ بِكَ مِنَ الْعَجْزِ وَالْكَسَلِ، وَأَعُوذُ بِكَ مِنَ الْجُبْنِ وَالْبُخْلِ، وَأَعُوذُ بِكَ مِنْ غَلَبَةِ الدَّيْنِ وَقَهْرِ الرِّجَالِ', count: 1, reference: 'البخاري'),
+          Dhikr(id: 27, text: 'اللَّهُمَّ أَصْلِحْ لِي دِينِي الَّذِي هُوَ عِصْمَةُ أَمْرِي، وَأَصْلِحْ لِي دُنْيَايَ الَّتِي فِيهَا مَعَاشِي، وَأَصْلِحْ لِي آخِرَتِي الَّتِي فِيهَا مَعَادِي، وَاجْعَلِ الْحَيَاةَ زِيَادَةً لِي فِي كُلِّ خَيْرٍ، وَاجْعَلِ الْمَوْتَ رَاحَةً لِي مِنْ كُلِّ شَرٍّ', count: 1, reference: 'مسلم'),
+          Dhikr(id: 28, text: 'اللَّهُمَّ اغْفِرْ لِي خَطِيئَتِي وَجَهْلِي، وَإِسْرَافِي فِي أَمْرِي، وَمَا أَنْتَ أَعْلَمُ بِهِ مِنِّي', count: 1, reference: 'متفق عليه'),
+          Dhikr(id: 29, text: 'رَبِّ اغْفِرْ لِي وَتُبْ عَلَيَّ إِنَّكَ أَنْتَ التَّوَّابُ الرَّحِيمُ', count: 100, reference: 'الترمذي'),
+        ],
+      ),
+      AdhkarCategory(
+        id: 6,
+        name: 'الاستغفار',
+        icon: Icons.auto_fix_high_rounded,
+        colors: [const Color(0xFF42A5F5), const Color(0xFF1976D2)],
+        items: [
+          Dhikr(id: 30, text: 'أَسْتَغْفِرُ اللهَ الْعَظِيمَ الَّذِي لَا إِلَهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ وَأَتُوبُ إِلَيْهِ', count: 3, reference: 'الترمذي'),
+          Dhikr(id: 31, text: 'أَسْتَغْفِرُ اللهَ وَأَتُوبُ إِلَيْهِ', count: 100, reference: 'متفق عليه'),
+          Dhikr(id: 32, text: 'رَبِّ اغْفِرْ لِي وَتُبْ عَلَيَّ إِنَّكَ أَنْتَ التَّوَّابُ الْغَفُورُ', count: 100, reference: 'الترمذي'),
+          Dhikr(id: 33, text: 'سُبْحَانَ اللهِ وَبِحَمْدِهِ أَسْتَغْفِرُ اللهَ وَأَتُوبُ إِلَيْهِ', count: 100),
+        ],
+      ),
+    ];
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                           شاشة الإعداد الأولي                                 ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+class SetupScreen extends StatefulWidget {
+  final SharedPreferences prefs;
+  final VoidCallback onComplete;
+
+  const SetupScreen({
+    super.key,
+    required this.prefs,
+    required this.onComplete,
+  });
+
+  @override
+  State<SetupScreen> createState() => _SetupScreenState();
+}
+
+class _SetupScreenState extends State<SetupScreen> with TickerProviderStateMixin {
+  int _currentStep = 0;
+  bool _isLoading = false;
+  double _progress = 0.0;
+  String _statusText = '';
+  
+  late DataService _dataService;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _dataService = DataService(widget.prefs);
+    
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.bgDark,
+              AppColors.surfaceDark,
+              AppColors.primaryDark.withAlpha(50),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _buildCurrentStep(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentStep() {
+    switch (_currentStep) {
+      case 0:
+        return _buildWelcomeStep();
+      case 1:
+        return _buildDownloadStep();
+      case 2:
+        return _buildCompleteStep();
+      default:
+        return _buildWelcomeStep();
+    }
+  }
+
+  Widget _buildWelcomeStep() {
+    return Column(
+      children: [
+        const Spacer(),
+        
+        // الشعار
+        ScaleTransition(
+          scale: _pulseAnimation,
+          child: Container(
+            width: 150,
+            height: 150,
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withAlpha(100),
+                  blurRadius: 40,
+                  spreadRadius: 10,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.menu_book_rounded,
+              size: 70,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 48),
+        
+        // العنوان
+        ShaderMask(
+          shaderCallback: (bounds) => AppColors.primaryGradient.createShader(bounds),
+          child: const Text(
+            'القرآن الكريم',
+            style: TextStyle(
+              fontSize: 40,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // الوصف
+        Text(
+          'تطبيق شامل للقرآن الكريم والأذكار\nيعمل بدون إنترنت',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey[400],
+            height: 1.6,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        
+        const SizedBox(height: 48),
+        
+        // المميزات
+        _buildFeatureItem(Icons.wifi_off_rounded, 'يعمل بدون إنترنت'),
+        _buildFeatureItem(Icons.headphones_rounded, 'استمع لأشهر القراء'),
+        _buildFeatureItem(Icons.bookmark_rounded, 'احفظ الآيات المفضلة'),
+        _buildFeatureItem(Icons.favorite_rounded, 'الأذكار والأدعية'),
+        
+        const Spacer(),
+        
+        // زر البدء
+        _buildGradientButton(
+          text: 'ابدأ الآن',
+          icon: Icons.arrow_forward_rounded,
+          onPressed: () => setState(() => _currentStep = 1),
+        ),
+        
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withAlpha(30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 22),
+          ),
+          const SizedBox(width: 16),
+          Text(
+            text,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadStep() {
+    return Column(
+      children: [
+        const Spacer(),
+        
+        // أيقونة التحميل
+        ScaleTransition(
+          scale: _pulseAnimation,
+          child: Container(
+            width: 130,
+            height: 130,
+            decoration: BoxDecoration(
+              gradient: AppColors.orangeGradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.orange.withAlpha(100),
+                  blurRadius: 30,
+                ),
+              ],
+            ),
+            child: Icon(
+              _isLoading ? Icons.downloading_rounded : Icons.cloud_download_rounded,
+              size: 60,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 40),
+        
+        Text(
+          _isLoading ? 'جاري التحميل...' : 'تحميل البيانات',
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        Text(
+          _isLoading 
+              ? _statusText
+              : 'سيتم تحميل بيانات التطبيق\nللعمل بدون إنترنت',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey[400],
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        
+        if (_isLoading) ...[
+          const SizedBox(height: 40),
+          
+          // شريط التقدم
+          Container(
+            height: 8,
+            margin: const EdgeInsets.symmetric(horizontal: 40),
+            decoration: BoxDecoration(
+              color: Colors.grey.withAlpha(50),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _progress,
+                backgroundColor: Colors.transparent,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          Text(
+            '${(_progress * 100).toInt()}%',
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+        
+        const Spacer(),
+        
+        if (!_isLoading)
+          _buildGradientButton(
+            text: 'بدء التحميل',
+            icon: Icons.download_rounded,
+            onPressed: _startDownload,
+          ),
+        
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildCompleteStep() {
+    return Column(
+      children: [
+        const Spacer(),
+        
+        Container(
+          width: 150,
+          height: 150,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Colors.green, Color(0xFF2E7D32)],
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withAlpha(100),
+                blurRadius: 40,
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 70,
+            color: Colors.white,
+          ),
+        ),
+        
+        const SizedBox(height: 48),
+        
+        const Text(
+          'تم بنجاح! 🎉',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        Text(
+          'التطبيق جاهز للاستخدام\nاستمتع بقراءة القرآن الكريم',
+          style: TextStyle(
+            fontSize: 18,
+            color: Colors.grey[400],
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        
+        const Spacer(),
+        
+        _buildGradientButton(
+          text: 'ابدأ الاستخدام',
+          icon: Icons.arrow_forward_rounded,
+          onPressed: widget.onComplete,
+        ),
+        
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildGradientButton({
+    required String text,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withAlpha(100),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(icon, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startDownload() async {
+    setState(() {
+      _isLoading = true;
+      _progress = 0;
+      _statusText = 'جاري التهيئة...';
+    });
+
+    try {
+      await _dataService.init();
+      
+      // تحميل السور
+      setState(() {
+        _progress = 0.1;
+        _statusText = 'جاري تحميل قائمة السور...';
+      });
+      
+      final surahs = await _dataService.fetchSurahs();
+      if (surahs.isNotEmpty) {
+        await _dataService.saveSurahs(surahs);
+      }
+      
+      // تحميل القراء
+      setState(() {
+        _progress = 0.5;
+        _statusText = 'جاري تحميل قائمة القراء...';
+      });
+      
+      final reciters = await _dataService.fetchReciters();
+      if (reciters.isNotEmpty) {
+        await _dataService.saveReciters(reciters);
+      }
+      
+      setState(() {
+        _progress = 1.0;
+        _statusText = 'اكتمل التحميل!';
+      });
+      
+      await Future.delayed(const Duration(milliseconds: 500));
+      setState(() => _currentStep = 2);
+      
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _statusText = 'فشل التحميل';
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                             الشاشة الرئيسية                                   ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
 class MainScreen extends StatefulWidget {
   final SharedPreferences prefs;
-  final Function(String) onThemeChanged;
-  final String currentTheme;
+  final VoidCallback onToggleTheme;
+  final bool isDarkMode;
 
   const MainScreen({
     super.key,
     required this.prefs,
-    required this.onThemeChanged,
-    required this.currentTheme,
+    required this.onToggleTheme,
+    required this.isDarkMode,
   });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
+class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final AudioService _audioService = AudioService();
-  final QuranApiService _apiService = QuranApiService();
-  final DownloadService _downloadService = DownloadService();
+  
+  late DataService _dataService;
+  late AudioService _audioService;
   
   List<Surah> _surahs = [];
   List<Reciter> _reciters = [];
   List<Bookmark> _bookmarks = [];
-  List<DownloadedSurah> _downloadedSurahs = [];
+  List<DownloadedAudio> _downloads = [];
   LastRead? _lastRead;
-  bool _isLoading = true;
   Reciter? _selectedReciter;
   bool _isOnline = true;
-  
-  double _fontSize = 24.0;
-  bool _showTranslation = true;
-
-  late AnimationController _fabAnimationController;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fabAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _loadData();
-    _checkConnectivity();
+    _dataService = DataService(widget.prefs);
+    _audioService = AudioService();
+    _initData();
   }
 
-  Future<void> _checkConnectivity() async {
-    final connectivityResult = await Connectivity().checkConnectivity();
-    setState(() {
-      _isOnline = connectivityResult != ConnectivityResult.none;
-    });
+  Future<void> _initData() async {
+    await _dataService.init();
     
+    // التحقق من الاتصال
+    final connectivityResult = await Connectivity().checkConnectivity();
+    _isOnline = !connectivityResult.contains(ConnectivityResult.none);
+    
+    // تحميل البيانات المحفوظة
+    _surahs = _dataService.getSurahs();
+    _reciters = _dataService.getReciters();
+    _bookmarks = _dataService.getBookmarks();
+    _downloads = _dataService.getDownloads();
+    _lastRead = _dataService.getLastRead();
+    
+    // تحديد القارئ المختار
+    final reciterId = _dataService.selectedReciterId;
+    if (reciterId != null && _reciters.isNotEmpty) {
+      _selectedReciter = _reciters.firstWhere(
+        (r) => r.id == reciterId,
+        orElse: () => _reciters.first,
+      );
+    } else if (_reciters.isNotEmpty) {
+      _selectedReciter = _reciters.first;
+    }
+    
+    // تحديث حالة التحميل
+    _updateDownloadStatus();
+    _updateBookmarkStatus();
+    
+    setState(() => _isLoading = false);
+    
+    // تحديث البيانات من الإنترنت
+    if (_isOnline) {
+      _refreshData();
+    }
+    
+    // مراقبة تغييرات الاتصال
     Connectivity().onConnectivityChanged.listen((result) {
       setState(() {
-        _isOnline = result != ConnectivityResult.none;
+        _isOnline = !result.contains(ConnectivityResult.none);
       });
     });
   }
 
-  Future<void> _loadData() async {
-    _loadSettings();
-    _loadBookmarks();
-    _loadLastRead();
-    _loadDownloadedSurahs();
-    
+  Future<void> _refreshData() async {
     try {
-      final results = await Future.wait([
-        _apiService.getSurahs(),
-        _apiService.getReciters(),
-      ]);
+      final surahs = await _dataService.fetchSurahs();
+      if (surahs.isNotEmpty) {
+        await _dataService.saveSurahs(surahs);
+        setState(() => _surahs = surahs);
+        _updateDownloadStatus();
+        _updateBookmarkStatus();
+      }
       
-      setState(() {
-        _surahs = results[0] as List<Surah>;
-        _reciters = results[1] as List<Reciter>;
-        if (_reciters.isNotEmpty) {
-          final savedReciterId = widget.prefs.getString('reciter_id');
-          _selectedReciter = _reciters.firstWhere(
-            (r) => r.id == savedReciterId,
-            orElse: () => _reciters.first,
-          );
-        }
-        _updateSurahsDownloadStatus();
-        _updateBookmarkedSurahs();
-        _isLoading = false;
-      });
+      final reciters = await _dataService.fetchReciters();
+      if (reciters.isNotEmpty) {
+        await _dataService.saveReciters(reciters);
+        setState(() => _reciters = reciters);
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      debugPrint('Error refreshing data: $e');
     }
   }
 
-  void _loadSettings() {
-    _fontSize = widget.prefs.getDouble('font_size') ?? 24.0;
-    _showTranslation = widget.prefs.getBool('show_translation') ?? true;
-  }
-
-  void _loadBookmarks() {
-    final jsonString = widget.prefs.getString('bookmarks');
-    if (jsonString != null) {
-      final jsonList = json.decode(jsonString) as List;
-      _bookmarks = jsonList.map((j) => Bookmark.fromJson(j)).toList();
-    }
-  }
-
-  void _saveBookmarks() {
-    final jsonList = _bookmarks.map((b) => b.toJson()).toList();
-    widget.prefs.setString('bookmarks', json.encode(jsonList));
-  }
-
-  void _loadLastRead() {
-    final jsonString = widget.prefs.getString('last_read');
-    if (jsonString != null) {
-      _lastRead = LastRead.fromJson(json.decode(jsonString));
-    }
-  }
-
-  void _saveLastRead(int surah, int ayah) {
-    _lastRead = LastRead(surah: surah, ayah: ayah, timestamp: DateTime.now());
-    widget.prefs.setString('last_read', json.encode(_lastRead!.toJson()));
-    setState(() {});
-  }
-
-  void _loadDownloadedSurahs() {
-    final jsonString = widget.prefs.getString('downloaded_surahs');
-    if (jsonString != null) {
-      final jsonList = json.decode(jsonString) as List;
-      _downloadedSurahs = jsonList.map((j) => DownloadedSurah.fromJson(j)).toList();
-    }
-  }
-
-  void _saveDownloadedSurahs() {
-    final jsonList = _downloadedSurahs.map((d) => d.toJson()).toList();
-    widget.prefs.setString('downloaded_surahs', json.encode(jsonList));
-  }
-
-  void _updateSurahsDownloadStatus() {
+  void _updateDownloadStatus() {
     for (var surah in _surahs) {
-      surah.isDownloaded = _downloadedSurahs.any(
+      surah.isDownloaded = _downloads.any(
         (d) => d.surahNumber == surah.number && d.reciterId == _selectedReciter?.id,
       );
     }
   }
 
-  void _updateBookmarkedSurahs() {
+  void _updateBookmarkStatus() {
     for (var surah in _surahs) {
       surah.isBookmarked = _bookmarks.any((b) => b.surahNumber == surah.number);
     }
   }
 
-  void _toggleBookmark(int surah, int ayah, String surahName) {
-    final existingIndex = _bookmarks.indexWhere(
-      (b) => b.surahNumber == surah && b.verseNumber == ayah,
+  void _saveLastRead(int surahNumber, int ayahNumber) {
+    _lastRead = LastRead(
+      surahNumber: surahNumber,
+      ayahNumber: ayahNumber,
+      timestamp: DateTime.now(),
     );
+    _dataService.saveLastRead(_lastRead!);
+    setState(() {});
+  }
 
+  void _toggleBookmark(int surahNumber, int ayahNumber, String surahName, String ayahText) {
+    final existingIndex = _bookmarks.indexWhere(
+      (b) => b.surahNumber == surahNumber && b.ayahNumber == ayahNumber,
+    );
+    
     setState(() {
       if (existingIndex >= 0) {
         _bookmarks.removeAt(existingIndex);
         _showSnackBar('تمت الإزالة من المفضلة', Icons.bookmark_remove);
       } else {
         _bookmarks.add(Bookmark(
-          surahNumber: surah,
+          surahNumber: surahNumber,
           surahName: surahName,
-          verseNumber: ayah,
+          ayahNumber: ayahNumber,
+          ayahText: ayahText,
           createdAt: DateTime.now(),
         ));
         _showSnackBar('تمت الإضافة للمفضلة', Icons.bookmark_add);
       }
-      _updateBookmarkedSurahs();
+      _updateBookmarkStatus();
     });
-    _saveBookmarks();
+    _dataService.saveBookmarks(_bookmarks);
   }
 
   void _showSnackBar(String message, IconData icon) {
@@ -1077,16 +1517,71 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: AppConstants.primaryColor,
+        backgroundColor: AppColors.primary,
         margin: const EdgeInsets.all(16),
       ),
     );
   }
 
+  Future<void> _downloadSurah(Surah surah) async {
+    if (_selectedReciter == null) {
+      _showSnackBar('يرجى اختيار قارئ أولاً', Icons.error);
+      return;
+    }
+
+    try {
+      final filePath = await _dataService.downloadAudio(
+        surahNumber: surah.number,
+        reciter: _selectedReciter!,
+        onProgress: (progress) {
+          setState(() {
+            surah.downloadProgress = progress;
+          });
+        },
+      );
+
+      if (filePath != null) {
+        final download = DownloadedAudio(
+          surahNumber: surah.number,
+          surahName: surah.name,
+          reciterId: _selectedReciter!.id,
+          reciterName: _selectedReciter!.name,
+          filePath: filePath,
+          downloadedAt: DateTime.now(),
+          fileSize: await File(filePath).length(),
+        );
+
+        setState(() {
+          _downloads.add(download);
+          surah.isDownloaded = true;
+          surah.downloadProgress = 0.0;
+        });
+        _dataService.saveDownloads(_downloads);
+        _showSnackBar('تم تحميل السورة بنجاح', Icons.check_circle);
+      }
+    } catch (e) {
+      setState(() {
+        surah.downloadProgress = 0.0;
+      });
+      _showSnackBar('فشل التحميل', Icons.error);
+    }
+  }
+
+  Future<void> _deleteDownload(DownloadedAudio download) async {
+    await _dataService.deleteAudio(download.filePath);
+    setState(() {
+      _downloads.removeWhere(
+        (d) => d.surahNumber == download.surahNumber && d.reciterId == download.reciterId,
+      );
+      _updateDownloadStatus();
+    });
+    _dataService.saveDownloads(_downloads);
+    _showSnackBar('تم حذف التحميل', Icons.delete);
+  }
+
   @override
   void dispose() {
     _audioService.dispose();
-    _fabAnimationController.dispose();
     super.dispose();
   }
 
@@ -1094,197 +1589,63 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
-      appBar: _buildAppBar(),
       body: Stack(
         children: [
-          // Background decoration
-          Positioned(
-            top: -100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppConstants.primaryColor.withValues(alpha: 0.1),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            left: -50,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppConstants.secondaryColor.withValues(alpha: 0.1),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Main content
+          // زخرفة الخلفية
+          _buildBackgroundDecorations(),
+          
+          // المحتوى
           IndexedStack(
             index: _currentIndex,
             children: [
-              HomeTab(
-                surahs: _surahs,
-                isLoading: _isLoading,
-                lastRead: _lastRead,
-                bookmarks: _bookmarks,
-                downloadedSurahs: _downloadedSurahs,
-                selectedReciter: _selectedReciter,
-                isOnline: _isOnline,
-                onSurahTap: _openSurah,
-                onContinueReading: _continueReading,
-                onDownloadSurah: _downloadSurah,
-                onDeleteDownload: _deleteDownload,
-              ),
-              DownloadsTab(
-                surahs: _surahs,
-                downloadedSurahs: _downloadedSurahs,
-                reciters: _reciters,
-                selectedReciter: _selectedReciter,
-                audioService: _audioService,
-                onPlay: _playDownloaded,
-                onDelete: _deleteDownload,
-                onSurahTap: _openSurah,
-              ),
-              AdhkarTab(audioService: _audioService),
-              RadioTab(audioService: _audioService, isOnline: _isOnline),
-              const PrayerTimesTab(),
+              _buildHomeTab(),
+              _buildQuranTab(),
+              _buildAdhkarTab(),
+              _buildSettingsTab(),
             ],
           ),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
-      floatingActionButton: _buildFAB(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      elevation: 0,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
+  Widget _buildBackgroundDecorations() {
+    return Stack(
+      children: [
+        Positioned(
+          top: -100,
+          right: -100,
+          child: Container(
+            width: 300,
+            height: 300,
             decoration: BoxDecoration(
-              gradient: AppConstants.primaryGradient,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: AppConstants.primaryColor.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.menu_book, color: Colors.white, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'القرآن الكريم',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      gradient: AppConstants.goldGradient,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'PRO',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'v2.0.0',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                  if (!_isOnline) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.wifi_off, size: 10, color: Colors.orange),
-                          SizedBox(width: 4),
-                          Text(
-                            'غير متصل',
-                            style: TextStyle(fontSize: 9, color: Colors.orange),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.primary.withAlpha(20),
+                  Colors.transparent,
                 ],
               ),
-            ],
+            ),
           ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: Stack(
-            children: [
-              const Icon(Icons.download_rounded),
-              if (_downloadedSurahs.isNotEmpty)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: AppConstants.primaryColor,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      '${_downloadedSurahs.length}',
-                      style: const TextStyle(fontSize: 8, color: Colors.white),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          onPressed: () => setState(() => _currentIndex = 1),
         ),
-        IconButton(
-          icon: const Icon(Icons.settings_rounded),
-          onPressed: () => _showSettingsBottomSheet(),
+        Positioned(
+          bottom: -50,
+          left: -50,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColors.secondary.withAlpha(20),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -1293,13 +1654,13 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? AppConstants.cardDarker.withValues(alpha: 0.98)
-            : Colors.white.withValues(alpha: 0.98),
+        color: widget.isDarkMode
+            ? AppColors.surfaceDark.withAlpha(250)
+            : Colors.white.withAlpha(250),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withAlpha(25),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -1307,15 +1668,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'الرئيسية'),
-              _buildNavItem(1, Icons.download_rounded, Icons.download_outlined, 'التحميلات'),
-              const SizedBox(width: 56), // Space for FAB
-              _buildNavItem(3, Icons.radio_rounded, Icons.radio_outlined, 'الراديو'),
-              _buildNavItem(4, Icons.mosque_rounded, Icons.mosque_outlined, 'الصلاة'),
+              _buildNavItem(1, Icons.menu_book_rounded, Icons.menu_book_outlined, 'القرآن'),
+              _buildNavItem(2, Icons.favorite_rounded, Icons.favorite_outline, 'الأذكار'),
+              _buildNavItem(3, Icons.settings_rounded, Icons.settings_outlined, 'الإعدادات'),
             ],
           ),
         ),
@@ -1333,7 +1693,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected 
-              ? AppConstants.primaryColor.withValues(alpha: 0.15)
+              ? AppColors.primary.withAlpha(40)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
@@ -1342,7 +1702,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           children: [
             Icon(
               isSelected ? activeIcon : inactiveIcon,
-              color: isSelected ? AppConstants.primaryColor : Colors.grey,
+              color: isSelected ? AppColors.primary : Colors.grey,
               size: 24,
             ),
             const SizedBox(height: 4),
@@ -1351,7 +1711,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? AppConstants.primaryColor : Colors.grey,
+                color: isSelected ? AppColors.primary : Colors.grey,
               ),
             ),
           ],
@@ -1360,231 +1720,581 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFAB() {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: AppConstants.primaryGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppConstants.primaryColor.withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+  // ========== تبويب الرئيسية ==========
+  
+  Widget _buildHomeTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return CustomScrollView(
+      slivers: [
+        // الهيدر
+        SliverToBoxAdapter(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withAlpha(80),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.menu_book_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'القرآن الكريم',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              gradient: AppColors.goldGradient,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'SMART PRO',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _isOnline 
+                                  ? Colors.green.withAlpha(50)
+                                  : Colors.orange.withAlpha(50),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _isOnline ? Icons.wifi : Icons.wifi_off,
+                                  size: 10,
+                                  color: _isOnline ? Colors.green : Colors.orange,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isOnline ? 'متصل' : 'غير متصل',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: _isOnline ? Colors.green : Colors.orange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  if (_downloads.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardDark,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.download_done, size: 16, color: Colors.green),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_downloads.length}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
-      child: FloatingActionButton(
-        onPressed: () => setState(() => _currentIndex = 2),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 28),
-      ),
+        ),
+        
+        // المحتوى
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              // بطاقة آخر قراءة
+              _buildLastReadCard(),
+              const SizedBox(height: 20),
+              
+              // الوصول السريع
+              _buildQuickAccessSection(),
+              const SizedBox(height: 24),
+              
+              // السور المقترحة
+              _buildSuggestedSurahsSection(),
+              
+              const SizedBox(height: 100),
+            ]),
+          ),
+        ),
+      ],
     );
   }
 
-  void _openSurah(Surah surah, [int? scrollToAyah]) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SurahDetailScreen(
-          surah: surah,
-          audioService: _audioService,
-          reciters: _reciters,
-          selectedReciter: _selectedReciter,
-          fontSize: _fontSize,
-          showTranslation: _showTranslation,
-          bookmarks: _bookmarks,
-          downloadedSurahs: _downloadedSurahs,
-          scrollToAyah: scrollToAyah,
-          isOnline: _isOnline,
-          onBookmarkToggle: (ayah) => _toggleBookmark(surah.number, ayah, surah.name),
-          onPageChanged: (ayah) => _saveLastRead(surah.number, ayah),
-          onReciterChanged: (reciter) {
-            setState(() => _selectedReciter = reciter);
-            widget.prefs.setString('reciter_id', reciter.id);
-          },
-          onDownloadComplete: (downloaded) {
-            setState(() {
-              _downloadedSurahs.add(downloaded);
-              _updateSurahsDownloadStatus();
-            });
-            _saveDownloadedSurahs();
-          },
+  Widget _buildLastReadCard() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.primary.withAlpha(40),
+            AppColors.secondary.withAlpha(25),
+          ],
+        ),
+        border: Border.all(
+          color: AppColors.primary.withAlpha(80),
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'آخر قراءة',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _getLastReadText(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _lastRead != null ? _continueReading : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 8,
+                  shadowColor: AppColors.primary.withAlpha(100),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.play_arrow_rounded, size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'متابعة القراءة',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
+  String _getLastReadText() {
+    if (_lastRead != null && _surahs.isNotEmpty) {
+      final surah = _surahs.firstWhere(
+        (s) => s.number == _lastRead!.surahNumber,
+        orElse: () => _surahs.first,
+      );
+      return '${surah.name} - الآية ${_lastRead!.ayahNumber}';
+    }
+    return 'لم تبدأ القراءة بعد';
+  }
+
   void _continueReading() {
-    if (_lastRead != null) {
-      final surah = _surahs.firstWhere((s) => s.number == _lastRead!.surah);
-      _openSurah(surah, _lastRead!.ayah);
+    if (_lastRead != null && _surahs.isNotEmpty) {
+      final surah = _surahs.firstWhere(
+        (s) => s.number == _lastRead!.surahNumber,
+        orElse: () => _surahs.first,
+      );
+      _openSurah(surah, scrollToAyah: _lastRead!.ayahNumber);
     }
   }
 
-  Future<void> _downloadSurah(Surah surah) async {
-    if (_selectedReciter == null) {
-      _showSnackBar('يرجى اختيار قارئ أولاً', Icons.error);
-      return;
-    }
+  Widget _buildQuickAccessSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 20,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'وصول سريع',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildQuickAccessItem('الفاتحة', '1', AppColors.primaryGradient, 1)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuickAccessItem('الكهف', '18', AppColors.blueGradient, 18)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuickAccessItem('يس', '36', AppColors.purpleGradient, 36)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuickAccessItem('الملك', '67', AppColors.orangeGradient, 67)),
+          ],
+        ),
+      ],
+    );
+  }
 
-    try {
-      final filePath = await _downloadService.downloadSurah(
-        surahNumber: surah.number,
-        reciter: _selectedReciter!,
-        onProgress: (progress) {
-          setState(() {
-            surah.downloadProgress = progress;
-          });
-        },
+  Widget _buildQuickAccessItem(String name, String number, LinearGradient gradient, int surahNumber) {
+    return GestureDetector(
+      onTap: () {
+        if (_surahs.length >= surahNumber) {
+          _openSurah(_surahs[surahNumber - 1]);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: gradient.colors.first.withAlpha(80),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              style: TextStyle(
+                color: Colors.white.withAlpha(230),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestedSurahsSection() {
+    final suggestedSurahs = <Surah>[];
+    
+    // إضافة آخر قراءة
+    if (_lastRead != null && _surahs.isNotEmpty) {
+      final surah = _surahs.firstWhere(
+        (s) => s.number == _lastRead!.surahNumber,
+        orElse: () => _surahs.first,
       );
-
-      if (filePath != null) {
-        final downloadedSurah = DownloadedSurah(
-          surahNumber: surah.number,
-          reciterId: _selectedReciter!.id,
-          reciterName: _selectedReciter!.name,
-          filePath: filePath,
-          downloadedAt: DateTime.now(),
-          fileSize: await File(filePath).length(),
-        );
-
-        setState(() {
-          _downloadedSurahs.add(downloadedSurah);
-          surah.isDownloaded = true;
-          surah.downloadProgress = 0.0;
-        });
-        _saveDownloadedSurahs();
-        _showSnackBar('تم تحميل السورة بنجاح', Icons.check_circle);
+      suggestedSurahs.add(surah);
+    }
+    
+    // إضافة المفضلة
+    for (var bookmark in _bookmarks.take(3)) {
+      final surah = _surahs.firstWhere(
+        (s) => s.number == bookmark.surahNumber,
+        orElse: () => _surahs.first,
+      );
+      if (!suggestedSurahs.contains(surah)) {
+        suggestedSurahs.add(surah);
       }
-    } catch (e) {
-      setState(() {
-        surah.downloadProgress = 0.0;
-      });
-      _showSnackBar('فشل التحميل: $e', Icons.error);
     }
-  }
-
-  Future<void> _deleteDownload(DownloadedSurah downloaded) async {
-    await _downloadService.deleteSurah(downloaded.filePath);
-    setState(() {
-      _downloadedSurahs.removeWhere(
-        (d) => d.surahNumber == downloaded.surahNumber && d.reciterId == downloaded.reciterId,
-      );
-      _updateSurahsDownloadStatus();
-    });
-    _saveDownloadedSurahs();
-    _showSnackBar('تم حذف التحميل', Icons.delete);
-  }
-
-  void _playDownloaded(DownloadedSurah downloaded) async {
-    try {
-      await _audioService.playFromFile(downloaded.filePath);
-    } catch (e) {
-      _showSnackBar('خطأ في التشغيل', Icons.error);
+    
+    // إكمال القائمة
+    while (suggestedSurahs.length < 4 && _surahs.length > suggestedSurahs.length) {
+      final surah = _surahs[suggestedSurahs.length];
+      if (!suggestedSurahs.contains(surah)) {
+        suggestedSurahs.add(surah);
+      }
     }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 20,
+              decoration: BoxDecoration(
+                gradient: AppColors.secondaryGradient,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'السور المقترحة',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ...suggestedSurahs.map((surah) => _buildSurahListItem(surah)),
+      ],
+    );
   }
 
-  void _showSettingsBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => SettingsBottomSheet(
-        prefs: widget.prefs,
-        currentTheme: widget.currentTheme,
-        fontSize: _fontSize,
-        showTranslation: _showTranslation,
-        reciters: _reciters,
-        selectedReciter: _selectedReciter,
-        downloadedSize: _downloadedSurahs.fold<int>(0, (sum, d) => sum + d.fileSize),
-        onThemeChanged: widget.onThemeChanged,
-        onFontSizeChanged: (value) {
-          setState(() => _fontSize = value);
-          widget.prefs.setDouble('font_size', value);
-        },
-        onShowTranslationChanged: (value) {
-          setState(() => _showTranslation = value);
-          widget.prefs.setBool('show_translation', value);
-        },
-        onReciterChanged: (reciter) {
-          setState(() {
-            _selectedReciter = reciter;
-            _updateSurahsDownloadStatus();
-          });
-          widget.prefs.setString('reciter_id', reciter.id);
-        },
-        onClearDownloads: () async {
-          for (var download in _downloadedSurahs) {
-            await _downloadService.deleteSurah(download.filePath);
-          }
-          setState(() {
-            _downloadedSurahs.clear();
-            _updateSurahsDownloadStatus();
-          });
-          _saveDownloadedSurahs();
-        },
+  Widget _buildSurahListItem(Surah surah) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardDark,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              '${surah.number}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        title: Text(
+          surah.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          '${surah.numberOfAyahs} آية',
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (surah.isDownloaded)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withAlpha(50),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.download_done, size: 14, color: Colors.green),
+              ),
+            if (surah.isBookmarked)
+              Icon(Icons.bookmark, size: 16, color: Colors.amber[600]),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+          ],
+        ),
+        onTap: () => _openSurah(surah),
+      ),
+    );
+  }
+
+  // ========== تبويب القرآن ==========
+  
+  Widget _buildQuranTab() {
+    return QuranListScreen(
+      surahs: _surahs,
+      downloads: _downloads,
+      selectedReciter: _selectedReciter,
+      isOnline: _isOnline,
+      onSurahTap: _openSurah,
+      onDownload: _downloadSurah,
+      onDeleteDownload: _deleteDownload,
+    );
+  }
+
+  // ========== تبويب الأذكار ==========
+  
+  Widget _buildAdhkarTab() {
+    return AdhkarScreen(audioService: _audioService);
+  }
+
+  // ========== تبويب الإعدادات ==========
+  
+  Widget _buildSettingsTab() {
+    return SettingsScreen(
+      dataService: _dataService,
+      reciters: _reciters,
+      selectedReciter: _selectedReciter,
+      downloads: _downloads,
+      bookmarks: _bookmarks,
+      isDarkMode: widget.isDarkMode,
+      onToggleTheme: widget.onToggleTheme,
+      onReciterChanged: (reciter) {
+        setState(() {
+          _selectedReciter = reciter;
+          _dataService.selectedReciterId = reciter.id;
+          _updateDownloadStatus();
+        });
+      },
+      onClearDownloads: () async {
+        for (var download in _downloads) {
+          await _dataService.deleteAudio(download.filePath);
+        }
+        setState(() {
+          _downloads.clear();
+          _updateDownloadStatus();
+        });
+        _dataService.saveDownloads(_downloads);
+        _showSnackBar('تم حذف جميع التحميلات', Icons.delete_sweep);
+      },
+    );
+  }
+
+  // ========== فتح السورة ==========
+  
+  void _openSurah(Surah surah, {int? scrollToAyah}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SurahScreen(
+          surah: surah,
+          dataService: _dataService,
+          audioService: _audioService,
+          reciters: _reciters,
+          selectedReciter: _selectedReciter,
+          downloads: _downloads,
+          bookmarks: _bookmarks,
+          isOnline: _isOnline,
+          scrollToAyah: scrollToAyah,
+          onBookmarkToggle: _toggleBookmark,
+          onSaveLastRead: _saveLastRead,
+          onDownload: _downloadSurah,
+          onReciterChanged: (reciter) {
+            setState(() {
+              _selectedReciter = reciter;
+              _dataService.selectedReciterId = reciter.id;
+              _updateDownloadStatus();
+            });
+          },
+        ),
       ),
     );
   }
 }
 
-// ==================== HOME TAB ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                              شاشة قائمة السور                                 ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
-class HomeTab extends StatefulWidget {
+class QuranListScreen extends StatefulWidget {
   final List<Surah> surahs;
-  final bool isLoading;
-  final LastRead? lastRead;
-  final List<Bookmark> bookmarks;
-  final List<DownloadedSurah> downloadedSurahs;
+  final List<DownloadedAudio> downloads;
   final Reciter? selectedReciter;
   final bool isOnline;
-  final Function(Surah, [int?]) onSurahTap;
-  final VoidCallback onContinueReading;
-  final Function(Surah) onDownloadSurah;
-  final Function(DownloadedSurah) onDeleteDownload;
+  final Function(Surah) onSurahTap;
+  final Function(Surah) onDownload;
+  final Function(DownloadedAudio) onDeleteDownload;
 
-  const HomeTab({
+  const QuranListScreen({
     super.key,
     required this.surahs,
-    required this.isLoading,
-    required this.lastRead,
-    required this.bookmarks,
-    required this.downloadedSurahs,
+    required this.downloads,
     required this.selectedReciter,
     required this.isOnline,
     required this.onSurahTap,
-    required this.onContinueReading,
-    required this.onDownloadSurah,
+    required this.onDownload,
     required this.onDeleteDownload,
   });
 
   @override
-  State<HomeTab> createState() => _HomeTabState();
+  State<QuranListScreen> createState() => _QuranListScreenState();
 }
 
-class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
+class _QuranListScreenState extends State<QuranListScreen> {
   String _searchQuery = '';
-  String _currentFilter = 'all';
+  String _filter = 'all';
   final TextEditingController _searchController = TextEditingController();
-  late AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _animationController.forward();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
 
   List<Surah> get _filteredSurahs {
     var list = widget.surahs;
@@ -1597,7 +2307,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       }).toList();
     }
     
-    switch (_currentFilter) {
+    switch (_filter) {
       case 'makki':
         list = list.where((s) => s.isMakki).toList();
         break;
@@ -1616,399 +2326,176 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(child: _buildLastReadCard()),
-        SliverToBoxAdapter(child: _buildSearchBar()),
-        SliverToBoxAdapter(child: _buildFilterChips()),
-        SliverToBoxAdapter(child: _buildSurahsHeader()),
-        widget.isLoading
-            ? const SliverFillRemaining(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: AppConstants.primaryColor),
-                      SizedBox(height: 16),
-                      Text('جاري تحميل السور...'),
-                    ],
+        // الهيدر
+        SliverToBoxAdapter(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'القرآن الكريم',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+                  _buildFilterChips(),
+                ],
+              ),
+            ),
+          ),
+        ),
+        
+        // عدد السور
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${_filteredSurahs.length} سورة',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              )
-            : _filteredSurahs.isEmpty
-                ? SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'لا توجد نتائج',
-                            style: TextStyle(color: Colors.grey[500], fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : SliverPadding(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.5, 0),
-                              end: Offset.zero,
-                            ).animate(CurvedAnimation(
-                              parent: _animationController,
-                              curve: Interval(
-                                (index / _filteredSurahs.length) * 0.5,
-                                ((index + 1) / _filteredSurahs.length) * 0.5 + 0.5,
-                                curve: Curves.easeOutCubic,
-                              ),
-                            )),
-                            child: _buildSurahCard(_filteredSurahs[index]),
-                          );
-                        },
-                        childCount: _filteredSurahs.length,
-                      ),
+                if (widget.downloads.isNotEmpty)
+                  Text(
+                    '${widget.downloads.length} محملة',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
                     ),
                   ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        
+        // قائمة السور
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildSurahCard(_filteredSurahs[index]),
+              childCount: _filteredSurahs.length,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildLastReadCard() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppConstants.primaryColor.withValues(alpha: 0.15),
-            AppConstants.secondaryColor.withValues(alpha: 0.1),
-          ],
-        ),
-        border: Border.all(
-          color: AppConstants.primaryColor.withValues(alpha: 0.3),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppConstants.primaryColor.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: AppConstants.primaryGradient,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppConstants.primaryColor.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.auto_stories, color: Colors.white, size: 24),
-                    ),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'آخر قراءة',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _getLastReadText(),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[400],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.green.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        widget.isOnline ? Icons.wifi : Icons.wifi_off,
-                        size: 14,
-                        color: widget.isOnline ? Colors.green : Colors.orange,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.isOnline ? 'متصل' : 'غير متصل',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: widget.isOnline ? Colors.green : Colors.orange,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: widget.lastRead != null ? widget.onContinueReading : null,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.play_arrow_rounded, size: 24),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.lastRead != null ? 'متابعة القراءة' : 'ابدأ القراءة',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (widget.downloadedSurahs.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(Icons.download_done, size: 16, color: Colors.grey[500]),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${widget.downloadedSurahs.length} سورة محملة للاستماع بدون إنترنت',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getLastReadText() {
-    if (widget.lastRead != null && widget.surahs.isNotEmpty) {
-      final surah = widget.surahs.firstWhere(
-        (s) => s.number == widget.lastRead!.surah,
-        orElse: () => widget.surahs.first,
-      );
-      return '${surah.name} - الآية ${widget.lastRead!.ayah}';
-    }
-    return 'لا يوجد قراءة سابقة';
-  }
-
   Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardDark,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'ابحث في السور...',
+          hintStyle: TextStyle(color: Colors.grey[500]),
+          prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[500]),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear_rounded, color: Colors.grey[500]),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
-        child: TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'ابحث في السور...',
-            hintStyle: TextStyle(color: Colors.grey[500]),
-            prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[500]),
-            suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(
-                    icon: Icon(Icons.clear_rounded, color: Colors.grey[500]),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _searchQuery = '');
-                    },
-                  )
-                : null,
-            filled: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          ),
-          onChanged: (value) => setState(() => _searchQuery = value),
-        ),
+        onChanged: (value) => setState(() => _searchQuery = value),
       ),
     );
   }
 
   Widget _buildFilterChips() {
-    return Container(
-      height: 56,
-      margin: const EdgeInsets.only(top: 16),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          _buildFilterChip('الكل', 'all', Icons.apps, Colors.green),
-          const SizedBox(width: 10),
-          _buildFilterChip('مكية', 'makki', Icons.location_city, Colors.blue),
-          const SizedBox(width: 10),
-          _buildFilterChip('مدنية', 'madani', Icons.mosque, Colors.purple),
-          const SizedBox(width: 10),
-          _buildFilterChip('المفضلة', 'bookmarked', Icons.bookmark, Colors.amber),
-          const SizedBox(width: 10),
-          _buildFilterChip('المحملة', 'downloaded', Icons.download_done, Colors.teal),
+          _buildFilterChip('الكل', 'all', Icons.apps_rounded),
+          const SizedBox(width: 8),
+          _buildFilterChip('مكية', 'makki', Icons.location_city_rounded),
+          const SizedBox(width: 8),
+          _buildFilterChip('مدنية', 'madani', Icons.mosque_rounded),
+          const SizedBox(width: 8),
+          _buildFilterChip('المفضلة', 'bookmarked', Icons.bookmark_rounded),
+          const SizedBox(width: 8),
+          _buildFilterChip('المحملة', 'downloaded', Icons.download_done_rounded),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label, String filter, IconData icon, Color color) {
-    final isActive = _currentFilter == filter;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => setState(() => _currentFilter = filter),
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: isActive 
-                ? color.withValues(alpha: 0.2)
-                : Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isActive ? color : Colors.grey.withValues(alpha: 0.2),
-              width: isActive ? 2 : 1,
+  Widget _buildFilterChip(String label, String filter, IconData icon) {
+    final isActive = _filter == filter;
+    return GestureDetector(
+      onTap: () => setState(() => _filter = filter),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: isActive ? AppColors.primaryGradient : null,
+          color: isActive ? null : AppColors.cardDark,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isActive ? Colors.white : Colors.grey,
             ),
-            boxShadow: isActive ? [
-              BoxShadow(
-                color: color.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                color: isActive ? Colors.white : Colors.grey,
+                fontSize: 13,
               ),
-            ] : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: isActive ? color : Colors.grey),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  color: isActive ? color : Colors.grey[400],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildSurahsHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  gradient: AppConstants.primaryGradient,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'السور',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppConstants.primaryColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '${_filteredSurahs.length} سورة',
-              style: TextStyle(
-                color: AppConstants.primaryColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSurahCard(Surah surah) {
-    final isDownloaded = widget.downloadedSurahs.any(
+    final isDownloaded = widget.downloads.any(
       (d) => d.surahNumber == surah.number && d.reciterId == widget.selectedReciter?.id,
     );
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
+        color: AppColors.cardDark,
         borderRadius: BorderRadius.circular(20),
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -2020,20 +2507,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                // Surah number with gradient
+                // رقم السورة
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: AppConstants.rainbowGradient,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppConstants.primaryColor.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Center(
                     child: Text(
@@ -2041,13 +2521,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 16,
                       ),
                     ),
                   ),
                 ),
+                
                 const SizedBox(width: 16),
-                // Surah info
+                
+                // معلومات السورة
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2059,7 +2541,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                               surah.name,
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 18,
+                                fontSize: 17,
                               ),
                             ),
                           ),
@@ -2067,45 +2549,29 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                             Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Colors.green.withValues(alpha: 0.2),
+                                color: Colors.green.withAlpha(50),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
-                                Icons.download_done,
-                                size: 16,
-                                color: Colors.green,
-                              ),
+                              child: const Icon(Icons.download_done, size: 14, color: Colors.green),
                             ),
                           if (surah.isBookmarked) ...[
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.bookmark,
-                              size: 18,
-                              color: Colors.amber[600],
-                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.bookmark, size: 16, color: Colors.amber[600]),
                           ],
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
                         surah.englishNameTranslation,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          _buildSurahBadge(
-                            '${surah.numberOfAyahs} آية',
-                            Icons.format_list_numbered,
-                            Colors.blue,
-                          ),
+                          _buildSurahBadge('${surah.numberOfAyahs} آية', AppColors.primary),
                           const SizedBox(width: 8),
                           _buildSurahBadge(
                             surah.isMakki ? 'مكية' : 'مدنية',
-                            surah.isMakki ? Icons.location_city : Icons.mosque,
                             surah.isMakki ? Colors.blue : Colors.purple,
                           ),
                         ],
@@ -2113,42 +2579,33 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     ],
                   ),
                 ),
-                // Download button
+                
+                // زر التحميل
                 if (widget.selectedReciter != null && widget.isOnline)
                   surah.downloadProgress > 0 && surah.downloadProgress < 1
                       ? SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              CircularProgressIndicator(
-                                value: surah.downloadProgress,
-                                strokeWidth: 3,
-                                backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                                color: AppConstants.primaryColor,
-                              ),
-                              Text(
-                                '${(surah.downloadProgress * 100).toInt()}%',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            ],
+                          width: 40,
+                          height: 40,
+                          child: CircularProgressIndicator(
+                            value: surah.downloadProgress,
+                            strokeWidth: 3,
+                            color: AppColors.primary,
                           ),
                         )
                       : isDownloaded
                           ? IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.red),
                               onPressed: () {
-                                final downloaded = widget.downloadedSurahs.firstWhere(
+                                final download = widget.downloads.firstWhere(
                                   (d) => d.surahNumber == surah.number && 
                                          d.reciterId == widget.selectedReciter?.id,
                                 );
-                                widget.onDeleteDownload(downloaded);
+                                widget.onDeleteDownload(download);
                               },
                             )
                           : IconButton(
                               icon: const Icon(Icons.download_outlined),
-                              onPressed: () => widget.onDownloadSurah(surah),
+                              onPressed: () => widget.onDownload(surah),
                             ),
               ],
             ),
@@ -2158,429 +2615,757 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildSurahBadge(String label, IconData icon, Color color) {
+  Widget _buildSurahBadge(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        color: color.withAlpha(40),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w500),
       ),
     );
   }
 }
 
-// ==================== DOWNLOADS TAB ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                               شاشة السورة                                     ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
-class DownloadsTab extends StatelessWidget {
-  final List<Surah> surahs;
-  final List<DownloadedSurah> downloadedSurahs;
+class SurahScreen extends StatefulWidget {
+  final Surah surah;
+  final DataService dataService;
+  final AudioService audioService;
   final List<Reciter> reciters;
   final Reciter? selectedReciter;
-  final AudioService audioService;
-  final Function(DownloadedSurah) onPlay;
-  final Function(DownloadedSurah) onDelete;
-  final Function(Surah, [int?]) onSurahTap;
+  final List<DownloadedAudio> downloads;
+  final List<Bookmark> bookmarks;
+  final bool isOnline;
+  final int? scrollToAyah;
+  final Function(int, int, String, String) onBookmarkToggle;
+  final Function(int, int) onSaveLastRead;
+  final Function(Surah) onDownload;
+  final Function(Reciter) onReciterChanged;
 
-  const DownloadsTab({
+  const SurahScreen({
     super.key,
-    required this.surahs,
-    required this.downloadedSurahs,
+    required this.surah,
+    required this.dataService,
+    required this.audioService,
     required this.reciters,
     required this.selectedReciter,
-    required this.audioService,
-    required this.onPlay,
-    required this.onDelete,
-    required this.onSurahTap,
+    required this.downloads,
+    required this.bookmarks,
+    required this.isOnline,
+    this.scrollToAyah,
+    required this.onBookmarkToggle,
+    required this.onSaveLastRead,
+    required this.onDownload,
+    required this.onReciterChanged,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final totalSize = downloadedSurahs.fold<int>(0, (sum, d) => sum + d.fileSize);
-    
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppConstants.primaryColor.withValues(alpha: 0.15),
-                  AppConstants.secondaryColor.withValues(alpha: 0.1),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: AppConstants.primaryColor.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        gradient: AppConstants.primaryGradient,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.download_done, color: Colors.white, size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'التحميلات',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${downloadedSurahs.length} سورة • ${_formatFileSize(totalSize)}',
-                            style: TextStyle(color: Colors.grey[500]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.wifi_off, color: Colors.green, size: 20),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'السور المحملة متاحة للاستماع بدون إنترنت',
-                          style: TextStyle(fontSize: 12, color: Colors.green),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (downloadedSurahs.isEmpty)
-          SliverFillRemaining(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.download_outlined, size: 64, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'لا توجد تحميلات',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'قم بتحميل السور للاستماع إليها\nبدون اتصال بالإنترنت',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.only(bottom: 100),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final download = downloadedSurahs[index];
-                  final surah = surahs.firstWhere(
-                    (s) => s.number == download.surahNumber,
-                    orElse: () => surahs.first,
-                  );
-                  final reciter = reciters.firstWhere(
-                    (r) => r.id == download.reciterId,
-                    orElse: () => reciters.first,
-                  );
-
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
-                        onTap: () => onSurahTap(surah),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  gradient: AppConstants.rainbowGradient,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${surah.number}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      surah.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      reciter.name,
-                                      style: TextStyle(
-                                        color: Colors.grey[500],
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _formatFileSize(download.fileSize),
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        gradient: AppConstants.primaryGradient,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.play_arrow,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ),
-                                    onPressed: () => onPlay(download),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                    onPressed: () => _showDeleteDialog(context, download),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                childCount: downloadedSurahs.length,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _showDeleteDialog(BuildContext context, DownloadedSurah download) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('حذف التحميل'),
-        content: const Text('هل تريد حذف هذه السورة من التحميلات؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              onDelete(download);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('حذف'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
+  State<SurahScreen> createState() => _SurahScreenState();
 }
 
-// ==================== ADHKAR TAB ====================
-
-class AdhkarTab extends StatefulWidget {
-  final AudioService audioService;
-
-  const AdhkarTab({super.key, required this.audioService});
-
-  @override
-  State<AdhkarTab> createState() => _AdhkarTabState();
-}
-
-class _AdhkarTabState extends State<AdhkarTab> {
-  final AdhkarService _adhkarService = AdhkarService();
-  List<AdhkarCategory> _categories = [];
+class _SurahScreenState extends State<SurahScreen> {
+  List<Ayah> _ayahs = [];
   bool _isLoading = true;
+  bool _isPlaying = false;
+  int? _playingAyah;
+  final ScrollController _scrollController = ScrollController();
+  double _fontSize = 26.0;
+  bool _showTranslation = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAdhkar();
+    _fontSize = widget.dataService.fontSize;
+    _showTranslation = widget.dataService.showTranslation;
+    _loadAyahs();
+    
+    widget.audioService.playerStateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state.playing;
+        });
+      }
+    });
   }
 
-  Future<void> _loadAdhkar() async {
-    final categories = await _adhkarService.getAdhkar();
+  Future<void> _loadAyahs() async {
+    // محاولة تحميل من الكاش أولاً
+    var ayahs = widget.dataService.getAyahs(widget.surah.number);
+    
+    if (ayahs.isEmpty && widget.isOnline) {
+      // تحميل من الإنترنت
+      if (_showTranslation) {
+        ayahs = await widget.dataService.fetchAyahsWithTranslation(
+          widget.surah.number,
+          'ar.muyassar',
+        );
+      } else {
+        ayahs = await widget.dataService.fetchAyahs(widget.surah.number);
+      }
+      
+      if (ayahs.isNotEmpty) {
+        await widget.dataService.saveAyahs(widget.surah.number, ayahs);
+      }
+    }
+    
     setState(() {
-      _categories = categories;
+      _ayahs = ayahs;
       _isLoading = false;
+    });
+    
+    // التمرير للآية المحددة
+    if (widget.scrollToAyah != null && _ayahs.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToAyah(widget.scrollToAyah!);
+      });
+    }
+  }
+
+  void _scrollToAyah(int ayahNumber) {
+    final index = _ayahs.indexWhere((a) => a.numberInSurah == ayahNumber);
+    if (index >= 0) {
+      _scrollController.animateTo(
+        index * 150.0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Future<void> _playAyah(Ayah ayah) async {
+    try {
+      // التحقق من وجود ملف محمل
+      final download = widget.downloads.firstWhere(
+        (d) => d.surahNumber == widget.surah.number && 
+               d.reciterId == widget.selectedReciter?.id,
+        orElse: () => DownloadedAudio(
+          surahNumber: 0,
+          surahName: '',
+          reciterId: '',
+          reciterName: '',
+          filePath: '',
+          downloadedAt: DateTime.now(),
+          fileSize: 0,
+        ),
+      );
+      
+      if (download.filePath.isNotEmpty) {
+        await widget.audioService.play(download.filePath, isFile: true);
+      } else if (ayah.audio != null && widget.isOnline) {
+        await widget.audioService.play(ayah.audio!);
+      } else if (widget.selectedReciter != null && widget.isOnline) {
+        final url = widget.selectedReciter!.getAudioUrl(widget.surah.number);
+        await widget.audioService.play(url);
+      }
+      
+      setState(() {
+        _playingAyah = ayah.numberInSurah;
+      });
+    } catch (e) {
+      debugPrint('Error playing ayah: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل تشغيل الصوت')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopPlaying() async {
+    await widget.audioService.stop();
+    setState(() {
+      _playingAyah = null;
     });
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppConstants.primaryColor),
-            SizedBox(height: 16),
-            Text('جاري تحميل الأذكار...'),
-          ],
-        ),
-      );
-    }
-
-    if (_categories.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+    return Scaffold(
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          // الهيدر
+          SliverAppBar(
+            expandedHeight: 200,
+            pinned: true,
+            stretch: true,
+            backgroundColor: AppColors.surfaceDark,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: const BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 40),
+                      Text(
+                        widget.surah.name,
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.surah.englishNameTranslation,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white.withAlpha(200),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildInfoBadge('${widget.surah.numberOfAyahs} آية'),
+                          const SizedBox(width: 12),
+                          _buildInfoBadge(widget.surah.isMakki ? 'مكية' : 'مدنية'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              child: Icon(Icons.favorite_outline, size: 64, color: Colors.grey[600]),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'لا توجد أذكار',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[500],
+            leading: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(50),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(50),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.settings_rounded, color: Colors.white),
+                ),
+                onPressed: _showSettings,
+              ),
+            ],
+          ),
+          
+          // البسملة
+          if (widget.surah.number != 1 && widget.surah.number != 9)
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
+                  style: TextStyle(
+                    fontSize: _fontSize,
+                    fontFamily: 'Amiri',
+                    color: AppColors.gold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
-          ],
-        ),
-      );
-    }
-
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        gradient: AppConstants.primaryGradient,
-                        borderRadius: BorderRadius.circular(2),
+          
+          // الآيات
+          _isLoading
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : _ayahs.isEmpty
+                  ? SliverFillRemaining(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.wifi_off, size: 64, color: Colors.grey[600]),
+                            const SizedBox(height: 16),
+                            Text(
+                              'لا يمكن تحميل الآيات',
+                              style: TextStyle(color: Colors.grey[500]),
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() => _isLoading = true);
+                                _loadAyahs();
+                              },
+                              child: const Text('إعادة المحاولة'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _buildAyahCard(_ayahs[index]),
+                          childCount: _ayahs.length,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'الأذكار والأدعية',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        ],
+      ),
+      
+      // شريط التحكم بالصوت
+      floatingActionButton: widget.selectedReciter != null
+          ? FloatingActionButton(
+              onPressed: () {
+                if (_isPlaying) {
+                  _stopPlaying();
+                } else if (_ayahs.isNotEmpty) {
+                  _playAyah(_ayahs.first);
+                }
+              },
+              backgroundColor: AppColors.primary,
+              child: Icon(
+                _isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                color: Colors.white,
+              ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildInfoBadge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(50),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAyahCard(Ayah ayah) {
+    final isBookmarked = widget.bookmarks.any(
+      (b) => b.surahNumber == widget.surah.number && b.ayahNumber == ayah.numberInSurah,
+    );
+    final isCurrentlyPlaying = _playingAyah == ayah.numberInSurah && _isPlaying;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isCurrentlyPlaying 
+            ? AppColors.primary.withAlpha(30)
+            : AppColors.cardDark,
+        borderRadius: BorderRadius.circular(20),
+        border: isCurrentlyPlaying
+            ? Border.all(color: AppColors.primary.withAlpha(100))
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // رأس البطاقة
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${ayah.numberInSurah}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'حافظ على أذكارك اليومية',
-                  style: TextStyle(color: Colors.grey[500]),
+                const Spacer(),
+                // أزرار الإجراءات
+                IconButton(
+                  icon: Icon(
+                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                    color: isBookmarked ? AppColors.gold : Colors.grey,
+                    size: 22,
+                  ),
+                  onPressed: () {
+                    widget.onBookmarkToggle(
+                      widget.surah.number,
+                      ayah.numberInSurah,
+                      widget.surah.name,
+                      ayah.text.length > 100 ? '${ayah.text.substring(0, 100)}...' : ayah.text,
+                    );
+                    setState(() {});
+                  },
+                ),
+                IconButton(
+                  icon: Icon(
+                    isCurrentlyPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                  onPressed: () {
+                    if (isCurrentlyPlaying) {
+                      _stopPlaying();
+                    } else {
+                      _playAyah(ayah);
+                    }
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined, size: 22),
+                  onPressed: () => _shareAyah(ayah),
                 ),
               ],
             ),
           ),
+          
+          // نص الآية
+          GestureDetector(
+            onTap: () {
+              widget.onSaveLastRead(widget.surah.number, ayah.numberInSurah);
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                ayah.text,
+                style: TextStyle(
+                  fontSize: _fontSize,
+                  fontFamily: 'Amiri',
+                  height: 2.0,
+                  color: isCurrentlyPlaying ? AppColors.primary : null,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          
+          // الترجمة
+          if (_showTranslation && ayah.translation != null)
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha(30),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                ayah.translation!,
+                style: TextStyle(
+                  fontSize: _fontSize * 0.6,
+                  color: Colors.grey[400],
+                  height: 1.8,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          
+          // معلومات إضافية
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                _buildAyahInfo('جزء ${ayah.juz}'),
+                const SizedBox(width: 12),
+                _buildAyahInfo('صفحة ${ayah.page}'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAyahInfo(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.withAlpha(30),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey[500],
         ),
+      ),
+    );
+  }
+
+  void _shareAyah(Ayah ayah) {
+    final text = '''
+${ayah.text}
+
+[${widget.surah.name} - الآية ${ayah.numberInSurah}]
+
+من تطبيق القرآن الكريم
+''';
+    Share.share(text);
+  }
+
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withAlpha(80),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'إعدادات القراءة',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // حجم الخط
+              Row(
+                children: [
+                  const Text('حجم الخط'),
+                  const Spacer(),
+                  Text('${_fontSize.round()}'),
+                ],
+              ),
+              Slider(
+                value: _fontSize,
+                min: 18,
+                max: 40,
+                divisions: 11,
+                activeColor: AppColors.primary,
+                onChanged: (value) {
+                  setModalState(() => _fontSize = value);
+                  setState(() {});
+                  widget.dataService.fontSize = value;
+                },
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // إظهار الترجمة
+              SwitchListTile(
+                title: const Text('إظهار التفسير'),
+                value: _showTranslation,
+                activeColor: AppColors.primary,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (value) {
+                  setModalState(() => _showTranslation = value);
+                  setState(() {});
+                  widget.dataService.showTranslation = value;
+                  if (value && _ayahs.isNotEmpty && _ayahs.first.translation == null) {
+                    _loadAyahs();
+                  }
+                },
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // اختيار القارئ
+              ListTile(
+                title: const Text('القارئ'),
+                subtitle: Text(widget.selectedReciter?.name ?? 'اختر قارئ'),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                contentPadding: EdgeInsets.zero,
+                onTap: () {
+                  Navigator.pop(context);
+                  _showReciterPicker();
+                },
+              ),
+              
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReciterPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 48,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withAlpha(80),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'اختر القارئ',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: widget.reciters.length,
+                  itemBuilder: (context, index) {
+                    final reciter = widget.reciters[index];
+                    final isSelected = widget.selectedReciter?.id == reciter.id;
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected 
+                            ? AppColors.primary.withAlpha(30)
+                            : AppColors.cardDark,
+                        borderRadius: BorderRadius.circular(16),
+                        border: isSelected 
+                            ? Border.all(color: AppColors.primary.withAlpha(80))
+                            : null,
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            gradient: isSelected ? AppColors.primaryGradient : null,
+                            color: isSelected ? null : Colors.grey.withAlpha(30),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.person_rounded,
+                            color: isSelected ? Colors.white : Colors.grey,
+                          ),
+                        ),
+                        title: Text(
+                          reciter.name,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: reciter.rewaya != null
+                            ? Text(
+                                reciter.rewaya!,
+                                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                              )
+                            : null,
+                        trailing: isSelected 
+                            ? const Icon(Icons.check_circle, color: AppColors.primary)
+                            : null,
+                        onTap: () {
+                          widget.onReciterChanged(reciter);
+                          Navigator.pop(context);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                              شاشة الأذكار                                     ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+class AdhkarScreen extends StatelessWidget {
+  final AudioService audioService;
+
+  const AdhkarScreen({super.key, required this.audioService});
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = AdhkarData.getCategories();
+    
+    return CustomScrollView(
+      slivers: [
+        // الهيدر
+        SliverToBoxAdapter(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'الأذكار والأدعية',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'حافظ على أذكارك اليومية',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        
+        // الفئات
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
           sliver: SliverGrid(
@@ -2592,22 +3377,10 @@ class _AdhkarTabState extends State<AdhkarTab> {
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                final category = _categories[index];
-                final colors = [
-                  [const Color(0xFFFF6B6B), const Color(0xFFEE5A5A)],
-                  [const Color(0xFF4ECDC4), const Color(0xFF44A39D)],
-                  [const Color(0xFF45B7D1), const Color(0xFF3A9BB8)],
-                  [const Color(0xFFF7B731), const Color(0xFFD49E29)],
-                  [const Color(0xFF5F27CD), const Color(0xFF4E20A8)],
-                  [const Color(0xFFFC427B), const Color(0xFFD93666)],
-                  [const Color(0xFF1DD1A1), const Color(0xFF19B089)],
-                  [const Color(0xFFFFA502), const Color(0xFFD98E02)],
-                ];
-                final colorPair = colors[index % colors.length];
-                
-                return _buildCategoryCard(category, colorPair);
+                final category = categories[index];
+                return _buildCategoryCard(context, category);
               },
-              childCount: _categories.length,
+              childCount: categories.length,
             ),
           ),
         ),
@@ -2615,12 +3388,12 @@ class _AdhkarTabState extends State<AdhkarTab> {
     );
   }
 
-  Widget _buildCategoryCard(AdhkarCategory category, List<Color> colors) {
+  Widget _buildCategoryCard(BuildContext context, AdhkarCategory category) {
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(24),
       child: InkWell(
-        onTap: () => _openAdhkarCategory(category),
+        onTap: () => _openCategory(context, category),
         borderRadius: BorderRadius.circular(24),
         child: Container(
           decoration: BoxDecoration(
@@ -2628,11 +3401,11 @@ class _AdhkarTabState extends State<AdhkarTab> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: colors,
+              colors: category.colors,
             ),
             boxShadow: [
               BoxShadow(
-                color: colors[0].withValues(alpha: 0.4),
+                color: category.colors[0].withAlpha(100),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
@@ -2646,25 +3419,18 @@ class _AdhkarTabState extends State<AdhkarTab> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withAlpha(50),
                     shape: BoxShape.circle,
                   ),
-                  child: Text(
-                    '${category.id}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                    ),
-                  ),
+                  child: Icon(category.icon, color: Colors.white, size: 28),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  category.category,
+                  category.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
+                    fontSize: 14,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
@@ -2674,14 +3440,14 @@ class _AdhkarTabState extends State<AdhkarTab> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withAlpha(50),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '${category.items.length} ذكر',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 12,
+                      color: Colors.white.withAlpha(230),
+                      fontSize: 11,
                     ),
                   ),
                 ),
@@ -2693,20 +3459,18 @@ class _AdhkarTabState extends State<AdhkarTab> {
     );
   }
 
-  void _openAdhkarCategory(AdhkarCategory category) {
+  void _openCategory(BuildContext context, AdhkarCategory category) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AdhkarDetailScreen(
           category: category,
-          audioService: widget.audioService,
+          audioService: audioService,
         ),
       ),
     );
   }
 }
-
-// ==================== ADHKAR DETAIL SCREEN ====================
 
 class AdhkarDetailScreen extends StatefulWidget {
   final AdhkarCategory category;
@@ -2723,83 +3487,76 @@ class AdhkarDetailScreen extends StatefulWidget {
 }
 
 class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
-  Map<int, int> _counters = {};
+  late Map<int, int> _counters;
 
   @override
   void initState() {
     super.initState();
-    for (var item in widget.category.items) {
-      _counters[item.id] = 0;
-    }
+    _counters = {for (var item in widget.category.items) item.id: 0};
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.category.category),
+        title: Text(widget.category.name),
+        backgroundColor: Colors.transparent,
         elevation: 0,
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: widget.category.items.length,
         itemBuilder: (context, index) {
-          final item = widget.category.items[index];
-          return _buildAdhkarCard(item);
+          final dhikr = widget.category.items[index];
+          return _buildDhikrCard(dhikr);
         },
       ),
     );
   }
 
-  Widget _buildAdhkarCard(AdhkarItem item) {
-    final count = _counters[item.id] ?? 0;
-    final isCompleted = item.count > 0 && count >= item.count;
+  Widget _buildDhikrCard(Dhikr dhikr) {
+    final count = _counters[dhikr.id] ?? 0;
+    final isCompleted = dhikr.count > 0 && count >= dhikr.count;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         color: isCompleted 
-            ? Colors.green.withValues(alpha: 0.1)
-            : Theme.of(context).cardColor,
+            ? Colors.green.withAlpha(25)
+            : AppColors.cardDark,
         border: isCompleted 
-            ? Border.all(color: Colors.green.withValues(alpha: 0.3))
+            ? Border.all(color: Colors.green.withAlpha(80))
             : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(24),
         child: InkWell(
-          onTap: () => _incrementCounter(item),
-          onLongPress: () => _resetCounter(item),
+          onTap: () => _incrementCounter(dhikr),
+          onLongPress: () => _resetCounter(dhikr),
           borderRadius: BorderRadius.circular(24),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // الهيدر
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppConstants.primaryColor.withValues(alpha: 0.1),
+                        gradient: AppColors.primaryGradient,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        'التكرار: ${item.count}',
+                        'التكرار: ${dhikr.count}',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: AppConstants.primaryColor,
+                          color: Colors.white,
                         ),
                       ),
                     ),
@@ -2814,9 +3571,12 @@ class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
                       ),
                   ],
                 ),
+                
                 const SizedBox(height: 20),
+                
+                // النص
                 Text(
-                  item.text,
+                  dhikr.text,
                   style: TextStyle(
                     fontSize: 22,
                     fontFamily: 'Amiri',
@@ -2825,26 +3585,21 @@ class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
                   ),
                   textAlign: TextAlign.center,
                 ),
+                
                 const SizedBox(height: 20),
+                
+                // العداد
                 Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     decoration: BoxDecoration(
                       gradient: isCompleted 
                           ? const LinearGradient(colors: [Colors.green, Color(0xFF2E7D32)])
-                          : AppConstants.primaryGradient,
+                          : AppColors.primaryGradient,
                       borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isCompleted ? Colors.green : AppConstants.primaryColor)
-                              .withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
                     ),
                     child: Text(
-                      item.count > 0 ? '$count / ${item.count}' : '$count',
+                      dhikr.count > 0 ? '$count / ${dhikr.count}' : '$count',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -2853,10 +3608,12 @@ class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
                     ),
                   ),
                 ),
-                if (item.reference != null) ...[
+                
+                // المرجع
+                if (dhikr.reference != null) ...[
                   const SizedBox(height: 16),
                   Text(
-                    item.reference!,
+                    dhikr.reference!,
                     style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     textAlign: TextAlign.center,
                   ),
@@ -2869,13 +3626,13 @@ class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
     );
   }
 
-  void _incrementCounter(AdhkarItem item) {
-    if (item.count == 0 || (_counters[item.id] ?? 0) < item.count) {
+  void _incrementCounter(Dhikr dhikr) {
+    if (dhikr.count == 0 || (_counters[dhikr.id] ?? 0) < dhikr.count) {
       setState(() {
-        _counters[item.id] = (_counters[item.id] ?? 0) + 1;
+        _counters[dhikr.id] = (_counters[dhikr.id] ?? 0) + 1;
       });
 
-      if (item.count > 0 && _counters[item.id] == item.count) {
+      if (dhikr.count > 0 && _counters[dhikr.id] == dhikr.count) {
         HapticFeedback.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2889,695 +3646,44 @@ class _AdhkarDetailScreenState extends State<AdhkarDetailScreen> {
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            margin: const EdgeInsets.all(16),
           ),
         );
       }
     }
   }
 
-  void _resetCounter(AdhkarItem item) {
+  void _resetCounter(Dhikr dhikr) {
     setState(() {
-      _counters[item.id] = 0;
+      _counters[dhikr.id] = 0;
     });
     HapticFeedback.lightImpact();
   }
 }
 
-// ==================== RADIO TAB ====================
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║                             شاشة الإعدادات                                    ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 
-class RadioTab extends StatefulWidget {
-  final AudioService audioService;
-  final bool isOnline;
-
-  const RadioTab({super.key, required this.audioService, required this.isOnline});
-
-  @override
-  State<RadioTab> createState() => _RadioTabState();
-}
-
-class _RadioTabState extends State<RadioTab> {
-  final QuranApiService _apiService = QuranApiService();
-  List<RadioStation> _radios = [];
-  bool _isLoading = true;
-  RadioStation? _playingRadio;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final radios = await _apiService.getRadios();
-    setState(() {
-      _radios = radios;
-      _isLoading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.isOnline) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.wifi_off, size: 64, color: Colors.orange),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'غير متصل بالإنترنت',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'الراديو يتطلب اتصال بالإنترنت',
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppConstants.primaryColor),
-            SizedBox(height: 16),
-            Text('جاري تحميل المحطات...'),
-          ],
-        ),
-      );
-    }
-
-    return CustomScrollView(
-      slivers: [
-        if (_playingRadio != null && widget.audioService.isPlaying)
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: AppConstants.primaryGradient,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppConstants.primaryColor.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.radio, size: 56, color: Colors.white),
-                  const SizedBox(height: 16),
-                  Text(
-                    _playingRadio!.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '🔴 بث مباشر',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _stopRadio,
-                    icon: const Icon(Icons.stop),
-                    label: const Text('إيقاف'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppConstants.primaryColor,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    gradient: AppConstants.primaryGradient,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'إذاعات القرآن الكريم',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final radio = _radios[index];
-                final isPlaying = _playingRadio?.id == radio.id && widget.audioService.isPlaying;
-                
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: isPlaying 
-                        ? AppConstants.primaryColor.withValues(alpha: 0.1)
-                        : Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(20),
-                    border: isPlaying 
-                        ? Border.all(color: AppConstants.primaryColor.withValues(alpha: 0.3))
-                        : null,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: isPlaying 
-                            ? AppConstants.primaryGradient
-                            : LinearGradient(
-                                colors: [
-                                  Colors.grey.withValues(alpha: 0.2),
-                                  Colors.grey.withValues(alpha: 0.1),
-                                ],
-                              ),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(
-                        isPlaying ? Icons.radio : Icons.radio_outlined,
-                        color: isPlaying ? Colors.white : Colors.grey,
-                      ),
-                    ),
-                    title: Text(
-                      radio.name,
-                      style: TextStyle(
-                        fontWeight: isPlaying ? FontWeight.bold : FontWeight.w500,
-                        color: isPlaying ? AppConstants.primaryColor : null,
-                      ),
-                    ),
-                    trailing: IconButton(
-                      icon: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          gradient: isPlaying ? null : AppConstants.primaryGradient,
-                          color: isPlaying ? Colors.red : null,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isPlaying ? Icons.stop : Icons.play_arrow,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      onPressed: () => isPlaying ? _stopRadio() : _playRadio(radio),
-                    ),
-                  ),
-                );
-              },
-              childCount: _radios.length,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _playRadio(RadioStation radio) async {
-    try {
-      await widget.audioService.playRadio(radio.url);
-      setState(() => _playingRadio = radio);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('خطأ في تشغيل الراديو')),
-        );
-      }
-    }
-  }
-
-  void _stopRadio() async {
-    await widget.audioService.stop();
-    setState(() => _playingRadio = null);
-  }
-}
-
-// ==================== PRAYER TIMES TAB ====================
-
-class PrayerTimesTab extends StatefulWidget {
-  const PrayerTimesTab({super.key});
-
-  @override
-  State<PrayerTimesTab> createState() => _PrayerTimesTabState();
-}
-
-class _PrayerTimesTabState extends State<PrayerTimesTab> {
-  final PrayerTimeService _service = PrayerTimeService();
-  PrayerTimings? _timings;
-  double? _qiblaDirection;
-  String _cityName = 'جاري التحديد...';
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPrayerTimes();
-  }
-
-  Future<void> _loadPrayerTimes() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final position = await _service.getCurrentLocation();
-      
-      if (position != null) {
-        final timings = await _service.getPrayerTimes(position.latitude, position.longitude);
-        final qibla = _service.calculateQiblaDirection(position.latitude, position.longitude);
-
-        setState(() {
-          _timings = timings;
-          _qiblaDirection = qibla;
-          _cityName = 'موقعك الحالي';
-          _isLoading = false;
-        });
-      } else {
-        final timings = await _service.getPrayerTimes(30.0444, 31.2357);
-        final qibla = _service.calculateQiblaDirection(30.0444, 31.2357);
-
-        setState(() {
-          _timings = timings;
-          _qiblaDirection = qibla;
-          _cityName = 'القاهرة (افتراضي)';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _loadPrayerTimes,
-      color: AppConstants.primaryColor,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 4,
-                height: 24,
-                decoration: BoxDecoration(
-                  gradient: AppConstants.primaryGradient,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'أوقات الصلاة',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: AppConstants.primaryColor),
-              ),
-            )
-          else ...[
-            // Location card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppConstants.primaryColor.withValues(alpha: 0.15),
-                    AppConstants.secondaryColor.withValues(alpha: 0.1),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: AppConstants.primaryColor.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      gradient: AppConstants.primaryGradient,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(Icons.location_on, color: Colors.white),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _cityName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-                          style: TextStyle(color: Colors.grey[500]),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.refresh, size: 20),
-                    ),
-                    onPressed: _loadPrayerTimes,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Prayer times
-            if (_timings != null)
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: _timings!.toList().asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final prayerEntry = entry.value;
-                    final isLast = index == _timings!.toList().length - 1;
-                    
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(
-                        border: isLast ? null : Border(
-                          bottom: BorderSide(
-                            color: Colors.grey.withValues(alpha: 0.1),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _getPrayerColor(prayerEntry.key).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Icon(
-                              _getPrayerIcon(prayerEntry.key),
-                              color: _getPrayerColor(prayerEntry.key),
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              prayerEntry.key,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  _getPrayerColor(prayerEntry.key).withValues(alpha: 0.2),
-                                  _getPrayerColor(prayerEntry.key).withValues(alpha: 0.1),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              prayerEntry.value,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: _getPrayerColor(prayerEntry.key),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            const SizedBox(height: 24),
-            // Qibla direction
-            Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    gradient: AppConstants.goldGradient,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'اتجاه القبلة',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 180,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppConstants.goldColor.withValues(alpha: 0.3),
-                        width: 4,
-                      ),
-                      gradient: RadialGradient(
-                        colors: [
-                          AppConstants.goldColor.withValues(alpha: 0.1),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Direction indicators
-                        ...['N', 'E', 'S', 'W'].asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final direction = entry.value;
-                          return Positioned(
-                            top: index == 0 ? 10 : (index == 2 ? null : 80),
-                            bottom: index == 2 ? 10 : null,
-                            left: index == 3 ? 10 : (index == 1 ? null : null),
-                            right: index == 1 ? 10 : null,
-                            child: Text(
-                              direction,
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          );
-                        }),
-                        // Compass needle
-                        Transform.rotate(
-                          angle: (_qiblaDirection ?? 0) * pi / 180,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 4,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  gradient: AppConstants.goldGradient,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              const Icon(
-                                Icons.mosque,
-                                color: AppConstants.goldColor,
-                                size: 28,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            gradient: AppConstants.goldGradient,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppConstants.goldColor.withValues(alpha: 0.4),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    decoration: BoxDecoration(
-                      gradient: AppConstants.goldGradient,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppConstants.goldColor.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      '${_qiblaDirection?.toStringAsFixed(1) ?? '--'}°',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 100),
-          ],
-        ],
-      ),
-    );
-  }
-
-  IconData _getPrayerIcon(String prayerName) {
-    switch (prayerName) {
-      case 'الفجر': return Icons.nightlight_round;
-      case 'الشروق': return Icons.wb_twilight;
-      case 'الظهر': return Icons.wb_sunny;
-      case 'العصر': return Icons.sunny_snowing;
-      case 'المغرب': return Icons.wb_twilight;
-      case 'العشاء': return Icons.nights_stay;
-      default: return Icons.access_time;
-    }
-  }
-
-  Color _getPrayerColor(String prayerName) {
-    switch (prayerName) {
-      case 'الفجر': return const Color(0xFF5C6BC0);
-      case 'الشروق': return const Color(0xFFFF7043);
-      case 'الظهر': return const Color(0xFFFFC107);
-      case 'العصر': return const Color(0xFF66BB6A);
-      case 'المغرب': return const Color(0xFFEF5350);
-      case 'العشاء': return const Color(0xFF7E57C2);
-      default: return Colors.grey;
-    }
-  }
-}
-
-// ==================== SETTINGS BOTTOM SHEET ====================
-
-class SettingsBottomSheet extends StatelessWidget {
-  final SharedPreferences prefs;
-  final String currentTheme;
-  final double fontSize;
-  final bool showTranslation;
+class SettingsScreen extends StatelessWidget {
+  final DataService dataService;
   final List<Reciter> reciters;
   final Reciter? selectedReciter;
-  final int downloadedSize;
-  final Function(String) onThemeChanged;
-  final Function(double) onFontSizeChanged;
-  final Function(bool) onShowTranslationChanged;
+  final List<DownloadedAudio> downloads;
+  final List<Bookmark> bookmarks;
+  final bool isDarkMode;
+  final VoidCallback onToggleTheme;
   final Function(Reciter) onReciterChanged;
   final VoidCallback onClearDownloads;
 
-  const SettingsBottomSheet({
+  const SettingsScreen({
     super.key,
-    required this.prefs,
-    required this.currentTheme,
-    required this.fontSize,
-    required this.showTranslation,
+    required this.dataService,
     required this.reciters,
     required this.selectedReciter,
-    required this.downloadedSize,
-    required this.onThemeChanged,
-    required this.onFontSizeChanged,
-    required this.onShowTranslationChanged,
+    required this.downloads,
+    required this.bookmarks,
+    required this.isDarkMode,
+    required this.onToggleTheme,
     required this.onReciterChanged,
     required this.onClearDownloads,
   });
@@ -3590,315 +3696,230 @@ class SettingsBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    final totalSize = downloads.fold<int>(0, (sum, d) => sum + d.fileSize);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SafeArea(
+          child: Text(
+            'الإعدادات',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
-        child: Column(
+        const SizedBox(height: 24),
+        
+        // الإحصائيات
+        _buildSection(context, 'الإحصائيات', [
+          _buildStatItem(
+            context,
+            'المفضلة',
+            '${bookmarks.length} آية',
+            Icons.bookmark_rounded,
+            AppColors.goldGradient,
+          ),
+          _buildStatItem(
+            context,
+            'التحميلات',
+            '${downloads.length} سورة',
+            Icons.download_rounded,
+            AppColors.blueGradient,
+          ),
+          _buildStatItem(
+            context,
+            'حجم التخزين',
+            _formatFileSize(totalSize),
+            Icons.storage_rounded,
+            AppColors.orangeGradient,
+          ),
+        ]),
+        
+        const SizedBox(height: 24),
+        
+        // الإعدادات
+        _buildSection(context, 'الإعدادات', [
+          _buildSettingItem(
+            context,
+            'المظهر',
+            isDarkMode ? 'داكن' : 'فاتح',
+            Icons.palette_rounded,
+            onToggleTheme,
+          ),
+          _buildSettingItem(
+            context,
+            'القارئ الافتراضي',
+            selectedReciter?.name ?? 'اختر قارئ',
+            Icons.person_rounded,
+            () => _showReciterPicker(context),
+          ),
+        ]),
+        
+        const SizedBox(height: 24),
+        
+        // الخيارات
+        _buildSection(context, 'الخيارات', [
+          _buildSettingItem(
+            context,
+            'حذف جميع التحميلات',
+            _formatFileSize(totalSize),
+            Icons.delete_sweep_rounded,
+            () => _confirmClearDownloads(context),
+            isDestructive: true,
+          ),
+          _buildSettingItem(
+            context,
+            'مشاركة التطبيق',
+            '',
+            Icons.share_rounded,
+            () => Share.share('تطبيق القرآن الكريم SMART PRO - أفضل تطبيق للقرآن يعمل بدون إنترنت'),
+          ),
+        ]),
+        
+        const SizedBox(height: 24),
+        
+        // حول التطبيق
+        _buildSection(context, 'حول التطبيق', [
+          _buildInfoItem('الإصدار', 'v3.0.0 SMART PRO'),
+          _buildInfoItem('المطور', 'محمد إبراهيم عبدالله'),
+        ]),
+        
+        const SizedBox(height: 100),
+      ],
+    );
+  }
+
+  Widget _buildSection(BuildContext context, String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
             Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              width: 48,
-              height: 5,
+              width: 4,
+              height: 20,
               decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(3),
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: AppConstants.primaryGradient,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(Icons.settings, color: Colors.white),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'الإعدادات',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _buildSectionTitle('المظهر'),
-                  _buildSettingCard(
-                    context,
-                    child: Column(
-                      children: [
-                        _buildThemeOption(context, 'داكن', 'dark', Icons.dark_mode),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        _buildThemeOption(context, 'فاتح', 'light', Icons.light_mode),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('القراءة'),
-                  _buildSettingCard(
-                    context,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: Text('حجم الخط'),
-                        ),
-                        Slider(
-                          value: fontSize,
-                          min: 16,
-                          max: 40,
-                          divisions: 12,
-                          label: fontSize.round().toString(),
-                          activeColor: AppConstants.primaryColor,
-                          onChanged: onFontSizeChanged,
-                        ),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        SwitchListTile(
-                          title: const Text('إظهار الترجمة'),
-                          subtitle: const Text('عرض ترجمة الآيات بالإنجليزية'),
-                          value: showTranslation,
-                          activeColor: AppConstants.primaryColor,
-                          onChanged: onShowTranslationChanged,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('القارئ الافتراضي'),
-                  _buildSettingCard(
-                    context,
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppConstants.secondaryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.person, color: AppConstants.secondaryColor),
-                      ),
-                      title: Text(selectedReciter?.name ?? 'اختر قارئ'),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () => _showReciterPicker(context),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('التخزين'),
-                  _buildSettingCard(
-                    context,
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.storage, color: Colors.green),
-                          ),
-                          title: const Text('المساحة المستخدمة'),
-                          trailing: Text(
-                            _formatFileSize(downloadedSize),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.delete_sweep, color: Colors.red),
-                          ),
-                          title: const Text('حذف كل التحميلات'),
-                          subtitle: const Text('إزالة جميع السور المحملة'),
-                          onTap: () => _showClearDownloadsDialog(context),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('حول التطبيق'),
-                  _buildSettingCard(
-                    context,
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppConstants.primaryColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.info_outline, color: AppConstants.primaryColor),
-                          ),
-                          title: const Text('الإصدار'),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              gradient: AppConstants.goldGradient,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              '2.0.0 PRO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.person_outline, color: Colors.purple),
-                          ),
-                          title: const Text('المطور'),
-                          subtitle: const Text('محمد إبراهيم عبدالله'),
-                        ),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.favorite, color: Colors.red),
-                          ),
-                          title: const Text('دعاء للمطور'),
-                          subtitle: const Text('نسألكم الدعاء'),
-                          onTap: () => _showDevPrayerDialog(context),
-                        ),
-                        Divider(color: Colors.grey.withValues(alpha: 0.1)),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(Icons.share, color: Colors.blue),
-                          ),
-                          title: const Text('مشاركة التطبيق'),
-                          onTap: () {
-                            Share.share('تطبيق القرآن الكريم PRO - أفضل تطبيق لقراءة القرآن والاستماع إليه');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                ],
+            const SizedBox(width: 10),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
               ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardDark,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(children: children),
+        ),
+      ],
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 20,
-            decoration: BoxDecoration(
-              gradient: AppConstants.primaryGradient,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppConstants.primaryColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingCard(BuildContext context, {required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildThemeOption(BuildContext context, String label, String value, IconData icon) {
-    final isSelected = currentTheme == value;
+  Widget _buildStatItem(
+    BuildContext context,
+    String title,
+    String value,
+    IconData icon,
+    LinearGradient gradient,
+  ) {
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isSelected 
-              ? AppConstants.primaryColor.withValues(alpha: 0.1)
-              : Colors.grey.withValues(alpha: 0.1),
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: Colors.white, size: 22),
+      ),
+      title: Text(title),
+      trailing: Text(
+        value,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingItem(
+    BuildContext context,
+    String title,
+    String value,
+    IconData icon,
+    VoidCallback onTap, {
+    bool isDestructive = false,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isDestructive 
+              ? Colors.red.withAlpha(30)
+              : AppColors.primary.withAlpha(30),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
           icon,
-          color: isSelected ? AppConstants.primaryColor : Colors.grey,
+          color: isDestructive ? Colors.red : AppColors.primary,
+          size: 22,
         ),
       ),
-      title: Text(label),
-      trailing: isSelected 
-          ? Container(
-              padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                gradient: AppConstants.primaryGradient,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check, color: Colors.white, size: 16),
-            )
-          : null,
-      onTap: () => onThemeChanged(value),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isDestructive ? Colors.red : null,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (value.isNotEmpty)
+            Text(value, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+          const SizedBox(width: 8),
+          const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildInfoItem(String title, String value) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.grey.withAlpha(30),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.info_outline_rounded, color: Colors.grey, size: 22),
+      ),
+      title: Text(title),
+      trailing: Text(value, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
     );
   }
 
   void _showReciterPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         minChildSize: 0.5,
@@ -3906,7 +3927,7 @@ class SettingsBottomSheet extends StatelessWidget {
         builder: (context, scrollController) => Container(
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             children: [
@@ -3915,15 +3936,18 @@ class SettingsBottomSheet extends StatelessWidget {
                 width: 48,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
+                  color: Colors.grey.withAlpha(80),
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
               const Padding(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(16),
                 child: Text(
                   'اختر القارئ',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               Expanded(
@@ -3934,27 +3958,28 @@ class SettingsBottomSheet extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final reciter = reciters[index];
                     final isSelected = selectedReciter?.id == reciter.id;
+                    
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
                         color: isSelected 
-                            ? AppConstants.primaryColor.withValues(alpha: 0.1)
-                            : Theme.of(context).cardColor,
+                            ? AppColors.primary.withAlpha(30)
+                            : AppColors.cardDark,
                         borderRadius: BorderRadius.circular(16),
                         border: isSelected 
-                            ? Border.all(color: AppConstants.primaryColor.withValues(alpha: 0.3))
+                            ? Border.all(color: AppColors.primary.withAlpha(80))
                             : null,
                       ),
                       child: ListTile(
                         leading: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            gradient: isSelected ? AppConstants.primaryGradient : null,
-                            color: isSelected ? null : Colors.grey.withValues(alpha: 0.1),
+                            gradient: isSelected ? AppColors.primaryGradient : null,
+                            color: isSelected ? null : Colors.grey.withAlpha(30),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
-                            Icons.person,
+                            Icons.person_rounded,
                             color: isSelected ? Colors.white : Colors.grey,
                           ),
                         ),
@@ -3964,8 +3989,14 @@ class SettingsBottomSheet extends StatelessWidget {
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
+                        subtitle: reciter.rewaya != null
+                            ? Text(
+                                reciter.rewaya!,
+                                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                              )
+                            : null,
                         trailing: isSelected 
-                            ? const Icon(Icons.check_circle, color: AppConstants.primaryColor)
+                            ? const Icon(Icons.check_circle, color: AppColors.primary)
                             : null,
                         onTap: () {
                           onReciterChanged(reciter);
@@ -3983,13 +4014,13 @@ class SettingsBottomSheet extends StatelessWidget {
     );
   }
 
-  void _showClearDownloadsDialog(BuildContext context) {
+  void _confirmClearDownloads(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('حذف التحميلات'),
-        content: const Text('هل أنت متأكد من حذف جميع السور المحملة؟'),
+        content: const Text('هل أنت متأكد من حذف جميع التحميلات؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -4000,910 +4031,13 @@ class SettingsBottomSheet extends StatelessWidget {
               onClearDownloads();
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('حذف الكل'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('حذف'),
           ),
         ],
       ),
-    );
-  }
-
-  void _showDevPrayerDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppConstants.primaryGradient,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.favorite, color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'دعوة للمطور',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'نسألكم الدعاء للمطور (محمد إبراهيم عبدالله) بالتوفيق والسداد وأن يجعل هذا العمل في ميزان حسناته.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, height: 1.8),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('آمين'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ==================== SURAH DETAIL SCREEN ====================
-
-class SurahDetailScreen extends StatefulWidget {
-  final Surah surah;
-  final AudioService audioService;
-  final List<Reciter> reciters;
-  final Reciter? selectedReciter;
-  final double fontSize;
-  final bool showTranslation;
-  final List<Bookmark> bookmarks;
-  final List<DownloadedSurah> downloadedSurahs;
-  final int? scrollToAyah;
-  final bool isOnline;
-  final Function(int) onBookmarkToggle;
-  final Function(int) onPageChanged;
-  final Function(Reciter) onReciterChanged;
-  final Function(DownloadedSurah) onDownloadComplete;
-
-  const SurahDetailScreen({
-    super.key,
-    required this.surah,
-    required this.audioService,
-    required this.reciters,
-    required this.selectedReciter,
-    required this.fontSize,
-    required this.showTranslation,
-    required this.bookmarks,
-    required this.downloadedSurahs,
-    required this.scrollToAyah,
-    required this.isOnline,
-    required this.onBookmarkToggle,
-    required this.onPageChanged,
-    required this.onReciterChanged,
-    required this.onDownloadComplete,
-  });
-
-  @override
-  State<SurahDetailScreen> createState() => _SurahDetailScreenState();
-}
-
-class _SurahDetailScreenState extends State<SurahDetailScreen> {
-  final QuranApiService _apiService = QuranApiService();
-  final DownloadService _downloadService = DownloadService();
-  List<Verse> _verses = [];
-  bool _isLoading = true;
-  bool _isAudioControlsVisible = false;
-  Reciter? _currentReciter;
-  bool _isPlaying = false;
-  bool _isDownloading = false;
-  double _downloadProgress = 0.0;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  StreamSubscription? _positionSubscription;
-  StreamSubscription? _durationSubscription;
-  StreamSubscription? _playerStateSubscription;
-  final ScrollController _scrollController = ScrollController();
-  final Map<int, GlobalKey> _verseKeys = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _currentReciter = widget.selectedReciter;
-    _loadVerses();
-    _setupAudioListeners();
-  }
-
-  void _setupAudioListeners() {
-    _positionSubscription = widget.audioService.positionStream.listen((pos) {
-      if (mounted) setState(() => _position = pos);
-    });
-    
-    _durationSubscription = widget.audioService.durationStream.listen((dur) {
-      if (dur != null && mounted) setState(() => _duration = dur);
-    });
-    
-    _playerStateSubscription = widget.audioService.playerStateStream.listen((state) {
-      if (mounted) setState(() => _isPlaying = state.playing);
-    });
-  }
-
-  Future<void> _loadVerses() async {
-    try {
-      final verses = widget.showTranslation
-          ? await _apiService.getVersesWithTranslation(widget.surah.number, 'en.sahih')
-          : await _apiService.getVerses(widget.surah.number);
-
-      setState(() {
-        _verses = verses;
-        _isLoading = false;
-      });
-
-      for (var verse in _verses) {
-        _verseKeys[verse.numberInSurah] = GlobalKey();
-      }
-
-      if (widget.scrollToAyah != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToAyah(widget.scrollToAyah!);
-        });
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _scrollToAyah(int ayahNumber) {
-    final key = _verseKeys[ayahNumber];
-    if (key?.currentContext != null) {
-      Scrollable.ensureVisible(
-        key!.currentContext!,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-        alignment: 0.3,
-      );
-    }
-  }
-
-  bool get _isDownloaded {
-    return widget.downloadedSurahs.any(
-      (d) => d.surahNumber == widget.surah.number && d.reciterId == _currentReciter?.id,
-    );
-  }
-
-  String? get _downloadedFilePath {
-    final downloaded = widget.downloadedSurahs.firstWhere(
-      (d) => d.surahNumber == widget.surah.number && d.reciterId == _currentReciter?.id,
-      orElse: () => DownloadedSurah(
-        surahNumber: 0,
-        reciterId: '',
-        reciterName: '',
-        filePath: '',
-        downloadedAt: DateTime.now(),
-        fileSize: 0,
-      ),
-    );
-    return downloaded.filePath.isNotEmpty ? downloaded.filePath : null;
-  }
-
-  @override
-  void dispose() {
-    _positionSubscription?.cancel();
-    _durationSubscription?.cancel();
-    _playerStateSubscription?.cancel();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: AppConstants.cardDarker,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppConstants.primaryColor.withValues(alpha: 0.8),
-                      AppConstants.secondaryColor.withValues(alpha: 0.6),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      right: -50,
-                      top: -50,
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: -30,
-                      bottom: -30,
-                      child: Container(
-                        width: 150,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 60),
-                          Text(
-                            widget.surah.name,
-                            style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.surah.englishName,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildHeaderBadge(
-                                '${widget.surah.numberOfAyahs} آية',
-                                Icons.format_list_numbered,
-                              ),
-                              const SizedBox(width: 12),
-                              _buildHeaderBadge(
-                                widget.surah.isMakki ? 'مكية' : 'مدنية',
-                                widget.surah.isMakki ? Icons.location_city : Icons.mosque,
-                              ),
-                              if (_isDownloaded) ...[
-                                const SizedBox(width: 12),
-                                _buildHeaderBadge('محملة', Icons.download_done),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            leading: IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
-              ),
-              onPressed: () {
-                widget.audioService.stop();
-                Navigator.pop(context);
-              },
-            ),
-            actions: [
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    _isAudioControlsVisible ? Icons.headphones : Icons.headphones_outlined,
-                    color: Colors.white,
-                  ),
-                ),
-                onPressed: () {
-                  setState(() => _isAudioControlsVisible = !_isAudioControlsVisible);
-                },
-              ),
-              if (widget.isOnline && _currentReciter != null && !_isDownloaded)
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: _isDownloading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              value: _downloadProgress,
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.download, color: Colors.white),
-                  ),
-                  onPressed: _isDownloading ? null : _downloadSurah,
-                ),
-            ],
-          ),
-          if (widget.surah.number != 9 && widget.surah.number != 1)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppConstants.goldColor.withValues(alpha: 0.15),
-                      AppConstants.goldColor.withValues(alpha: 0.05),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppConstants.goldColor.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: const Text(
-                  'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontFamily: 'Amiri',
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.goldColor,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator(color: AppConstants.primaryColor)),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildVerseCard(_verses[index]),
-                  childCount: _verses.length,
-                ),
-              ),
-            ),
-        ],
-      ),
-      bottomSheet: _isAudioControlsVisible ? _buildAudioControls() : null,
-    );
-  }
-
-  Widget _buildHeaderBadge(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVerseCard(Verse verse) {
-    final isBookmarked = widget.bookmarks.any(
-      (b) => b.surahNumber == widget.surah.number && b.verseNumber == verse.numberInSurah,
-    );
-
-    String verseText = verse.text;
-    if (verse.numberInSurah == 1 && widget.surah.number != 1 && widget.surah.number != 9) {
-      verseText = verseText.replaceFirst(
-        RegExp(r'^(بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ|بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ)\s*'),
-        '',
-      );
-    }
-
-    return Container(
-      key: _verseKeys[verse.numberInSurah],
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: AppConstants.rainbowGradient,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${verse.numberInSurah}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    Icons.bookmark,
-                    size: 22,
-                    color: isBookmarked ? Colors.amber : Colors.grey,
-                  ),
-                  onPressed: () => widget.onBookmarkToggle(verse.numberInSurah),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 22),
-                  onPressed: () => _copyVerse(verse, verseText),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.share, size: 22),
-                  onPressed: () => _shareVerse(verse, verseText),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Text(
-              verseText,
-              style: TextStyle(
-                fontSize: widget.fontSize,
-                fontFamily: 'Amiri',
-                height: 2.2,
-              ),
-              textAlign: TextAlign.justify,
-              textDirection: TextDirection.rtl,
-            ),
-            if (widget.showTranslation && verse.translation != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  verse.translation!,
-                  style: TextStyle(
-                    fontSize: widget.fontSize - 6,
-                    color: Colors.grey[500],
-                    height: 1.6,
-                  ),
-                  textDirection: TextDirection.ltr,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _buildVerseBadge('الجزء ${verse.juz}', Icons.layers),
-                const SizedBox(width: 8),
-                _buildVerseBadge('الصفحة ${verse.page}', Icons.menu_book),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVerseBadge(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppConstants.primaryColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: AppConstants.primaryColor),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppConstants.primaryColor,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAudioControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: _togglePlayPause,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: AppConstants.primaryGradient,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppConstants.primaryColor.withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      _isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    children: [
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 4,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                        ),
-                        child: Slider(
-                          value: _position.inSeconds.toDouble(),
-                          max: _duration.inSeconds.toDouble().clamp(1, double.infinity),
-                          onChanged: (value) {
-                            widget.audioService.seek(Duration(seconds: value.toInt()));
-                          },
-                          activeColor: AppConstants.primaryColor,
-                          inactiveColor: Colors.grey.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _formatDuration(_position),
-                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                            ),
-                            Text(
-                              _formatDuration(_duration),
-                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.person, size: 20),
-                  ),
-                  onPressed: _showReciterPicker,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _currentReciter?.name ?? 'اختر قارئ',
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  void _togglePlayPause() async {
-    if (_isPlaying) {
-      await widget.audioService.pause();
-    } else {
-      if (_currentReciter != null) {
-        try {
-          // Try to play from downloaded file first
-          if (_isDownloaded && _downloadedFilePath != null) {
-            await widget.audioService.playFromFile(_downloadedFilePath!);
-          } else if (widget.isOnline) {
-            final url = _apiService.getSurahAudioUrl(_currentReciter!, widget.surah.number);
-            await widget.audioService.playSurah(url);
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('السورة غير محملة ولا يوجد اتصال بالإنترنت')),
-              );
-            }
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('خطأ في تشغيل الصوت')),
-            );
-          }
-        }
-      }
-    }
-  }
-
-  Future<void> _downloadSurah() async {
-    if (_currentReciter == null) return;
-
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0;
-    });
-
-    try {
-      final filePath = await _downloadService.downloadSurah(
-        surahNumber: widget.surah.number,
-        reciter: _currentReciter!,
-        onProgress: (progress) {
-          setState(() => _downloadProgress = progress);
-        },
-      );
-
-      if (filePath != null) {
-        final file = File(filePath);
-        final fileSize = await file.length();
-        
-        final downloadedSurah = DownloadedSurah(
-          surahNumber: widget.surah.number,
-          reciterId: _currentReciter!.id,
-          reciterName: _currentReciter!.name,
-          filePath: filePath,
-          downloadedAt: DateTime.now(),
-          fileSize: fileSize,
-        );
-
-        widget.onDownloadComplete(downloadedSurah);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 12),
-                  Text('تم تحميل السورة بنجاح'),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('فشل التحميل: $e')),
-        );
-      }
-    } finally {
-      setState(() {
-        _isDownloading = false;
-        _downloadProgress = 0;
-      });
-    }
-  }
-
-  void _showReciterPicker() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 48,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                  'اختر القارئ',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: widget.reciters.length,
-                  itemBuilder: (context, index) {
-                    final reciter = widget.reciters[index];
-                    final isAvailable = reciter.surahList.contains(widget.surah.number);
-                    final isSelected = _currentReciter?.id == reciter.id;
-                    final isDownloaded = widget.downloadedSurahs.any(
-                      (d) => d.surahNumber == widget.surah.number && d.reciterId == reciter.id,
-                    );
-                    
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected 
-                            ? AppConstants.primaryColor.withValues(alpha: 0.1)
-                            : Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        border: isSelected 
-                            ? Border.all(color: AppConstants.primaryColor.withValues(alpha: 0.3))
-                            : null,
-                      ),
-                      child: ListTile(
-                        enabled: isAvailable,
-                        leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: isSelected ? AppConstants.primaryGradient : null,
-                            color: isSelected ? null : Colors.grey.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.person,
-                            color: isSelected 
-                                ? Colors.white 
-                                : (isAvailable ? Colors.grey : Colors.grey[700]),
-                          ),
-                        ),
-                        title: Text(
-                          reciter.name,
-                          style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isAvailable ? null : Colors.grey[600],
-                          ),
-                        ),
-                        subtitle: isAvailable ? null : const Text('غير متوفر لهذه السورة'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isDownloaded)
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.download_done, size: 16, color: Colors.green),
-                              ),
-                            if (isSelected)
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8),
-                                child: Icon(Icons.check_circle, color: AppConstants.primaryColor),
-                              ),
-                          ],
-                        ),
-                        onTap: isAvailable
-                            ? () {
-                                setState(() => _currentReciter = reciter);
-                                widget.onReciterChanged(reciter);
-                                Navigator.pop(context);
-                                if (_isPlaying) {
-                                  widget.audioService.stop();
-                                  _togglePlayPause();
-                                }
-                              }
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _copyVerse(Verse verse, String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
-            Text('تم نسخ الآية'),
-          ],
-        ),
-        backgroundColor: AppConstants.primaryColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-    );
-  }
-
-  void _shareVerse(Verse verse, String text) {
-    Share.share(
-      '${widget.surah.name} - الآية ${verse.numberInSurah}\n\n$text\n\n(القرآن الكريم)',
     );
   }
 }
